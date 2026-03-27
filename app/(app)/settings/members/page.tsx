@@ -161,7 +161,7 @@ export default function MembersPage() {
         <div className="text-center py-16 text-muted-foreground">
           <Users className="h-10 w-10 mx-auto mb-3" />
           <p className="text-sm font-medium">No members yet</p>
-          <p className="text-xs mt-1">You'll appear here after your first visit is synced.</p>
+          <p className="text-xs mt-1">You&apos;ll appear here after your first visit is synced.</p>
         </div>
       ) : (
         <div className="rounded-lg border overflow-auto">

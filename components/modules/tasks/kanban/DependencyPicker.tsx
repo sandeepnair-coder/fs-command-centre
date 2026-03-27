@@ -51,7 +51,7 @@ export function DependencySection({
     }
   }
 
-  async function handleAddBlockedBy(blockingTaskId: string, blockingTitle: string) {
+  async function handleAddBlockedBy(blockingTaskId: string) {
     try {
       const dep = await addDependency(blockingTaskId, taskId);
       setBlockedBy((prev) => [...prev, dep]);
@@ -98,7 +98,7 @@ export function DependencySection({
           projectId={projectId}
           excludeTaskId={taskId}
           label="Add blocker"
-          onSelect={(id, title) => handleAddBlockedBy(id, title)}
+          onSelect={(id) => handleAddBlockedBy(id)}
         />
       </div>
 

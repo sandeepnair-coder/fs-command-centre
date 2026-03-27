@@ -37,8 +37,7 @@ export function NewBoardDialog({
       setDescription("");
       onCreated?.();
       toast.success("Board created. Let's go.");
-    } catch (err) {
-      console.error(err);
+    } catch {
       toast.error("Couldn't create the board. Try again?");
     } finally {
       setPending(false);

@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, BarChart3, TrendingUp, AlertTriangle } from "lucide-react";
+import { Search, BarChart3, AlertTriangle } from "lucide-react";
 import {
   BarChart,
   Bar,

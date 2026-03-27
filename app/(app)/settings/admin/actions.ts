@@ -18,7 +18,7 @@ export async function getMembers() {
     .map((m) => m.user_id)
     .filter(Boolean) as string[];
 
-  let profileMap: Record<
+  const profileMap: Record<
     string,
     { full_name: string; avatar_url: string | null }
   > = {};

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentMember } from "@/lib/auth/getCurrentMember";
 import { revalidatePath } from "next/cache";
 import type { TaskPriority } from "@/lib/types/tasks";
 
@@ -271,6 +272,8 @@ export async function createTask(
     .limit(1);
   const nextPos = existing && existing.length > 0 ? existing[0].position + 1000 : 0;
 
+  const member = await getCurrentMember();
+
   const { data, error } = await supabase
     .from("tasks")
     .insert({
@@ -278,7 +281,7 @@ export async function createTask(
       column_id: columnId,
       title,
       position: nextPos,
-      created_by: null,
+      created_by: member?.id ?? null,
       ...(opts?.priority ? { priority: opts.priority } : {}),
       ...(opts?.due_date ? { due_date: opts.due_date } : {}),
       ...(opts?.client_id ? { client_id: opts.client_id } : {}),
@@ -389,10 +392,21 @@ export async function getTaskDetail(taskId: string) {
     })
   );
 
+  // Enrich comments with author profile info
+  const comments = (commentsRes.data || []).map((c) => {
+    const author = c.author_id ? memberMap[c.author_id] : null;
+    return {
+      ...c,
+      profiles: author
+        ? { full_name: author.full_name, avatar_url: author.avatar_url, avatar_color: null }
+        : null,
+    };
+  });
+
   return {
     ...task,
     assignees,
-    comments: commentsRes.data || [],
+    comments,
     attachments,
     links: linksRes.data || [],
   };
@@ -442,14 +456,21 @@ export async function removeAssignee(taskId: string, userId: string) {
 
 export async function addComment(taskId: string, body: string) {
   const supabase = await createClient();
+  const member = await getCurrentMember();
 
   const { data, error } = await supabase
     .from("task_comments")
-    .insert({ task_id: taskId, author_id: null, body })
+    .insert({ task_id: taskId, author_id: member?.id ?? null, body })
     .select("*")
     .single();
   if (error) throw error;
-  return data;
+
+  return {
+    ...data,
+    profiles: member
+      ? { full_name: member.full_name, avatar_url: member.avatar_url, avatar_color: null }
+      : null,
+  };
 }
 
 export async function deleteComment(commentId: string) {

@@ -66,7 +66,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { ProjectColumn, TaskPriority, Profile, TaskFilters, ViewMode, Subtask } from "@/lib/types/tasks";
 import { DEFAULT_FILTERS, filterColumns } from "@/lib/tasks/filters";
 import { getSubtasks, setSubtasks as persistSubtasks } from "@/lib/tasks/subtasks";
+import { TaskSheet } from "./TaskSheet";
 import { toast } from "sonner";
+import type { Task } from "@/lib/types/tasks";
 
 type Client = { id: string; name: string };
 type Project = {
@@ -790,10 +792,6 @@ export function KanbanShell() {
     </div>
   );
 }
-
-// Thin wrapper to use TaskSheet from list/calendar views
-import { TaskSheet } from "./TaskSheet";
-import type { Task } from "@/lib/types/tasks";
 
 function TaskSheetWrapper({
   taskId,

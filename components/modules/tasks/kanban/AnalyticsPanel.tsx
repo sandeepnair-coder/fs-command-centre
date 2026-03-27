@@ -25,7 +25,7 @@ import {
   Legend,
 } from "recharts";
 import { differenceInDays, startOfDay, isPast, isToday } from "date-fns";
-import type { ProjectColumn, Task } from "@/lib/types/tasks";
+import type { ProjectColumn } from "@/lib/types/tasks";
 
 const STATUS_COLORS = [
   "#8884d8",
@@ -60,7 +60,6 @@ export function AnalyticsPanel({
   const totalTasks = allTasks.length;
 
   const overdueTasks = useMemo(() => {
-    const today = startOfDay(new Date());
     return allTasks.filter(
       (t) => t.due_date && isPast(startOfDay(new Date(t.due_date))) && !isToday(startOfDay(new Date(t.due_date)))
     ).length;
