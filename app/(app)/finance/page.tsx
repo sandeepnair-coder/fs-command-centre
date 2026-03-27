@@ -158,8 +158,7 @@ export default function FinanceOverviewPage() {
             {loading ? <Skeleton className="h-full w-full" /> : expenseChartData.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
                 <Receipt className="h-8 w-8 mb-2" />
-                <p className="text-sm">No expenses recorded yet</p>
-                <p className="text-xs mt-1">Add your first expense to see the breakdown</p>
+                <p className="text-sm">No expenses recorded yet. Add your first one to see the breakdown.</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
@@ -184,8 +183,7 @@ export default function FinanceOverviewPage() {
             {loading ? <Skeleton className="h-full w-full" /> : projectFinancials.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
                 <TrendingUp className="h-8 w-8 mb-2" />
-                <p className="text-sm">No projects with budgets yet</p>
-                <p className="text-xs mt-1">Set a ₹ cost on Kanban task cards to track budgets</p>
+                <p className="text-sm">No projects with budgets yet. Set a ₹ cost on task cards to start tracking.</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
@@ -227,8 +225,7 @@ export default function FinanceOverviewPage() {
           ) : activity.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <FileText className="h-8 w-8 mx-auto mb-2" />
-              <p className="text-sm">No financial activity yet</p>
-              <p className="text-xs mt-1">Create a purchase order, log an expense, or generate an invoice to get started</p>
+              <p className="text-sm">No financial activity yet. Create a PO, log an expense, or send an invoice to get the ball rolling.</p>
             </div>
           ) : (
             <div className="space-y-2">

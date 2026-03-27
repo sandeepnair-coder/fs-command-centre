@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createProject } from "@/app/(app)/tasks/actions";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { SUCCESS } from "@/lib/copy";
 
 export function NewBoardDialog({
   onCreated,
@@ -36,7 +37,7 @@ export function NewBoardDialog({
       setName("");
       setDescription("");
       onCreated?.();
-      toast.success("Board created. Let's go.");
+      toast.success(SUCCESS.boardCreated);
     } catch {
       toast.error("Couldn't create the board. Try again?");
     } finally {

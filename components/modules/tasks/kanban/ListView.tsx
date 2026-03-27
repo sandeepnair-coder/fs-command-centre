@@ -16,6 +16,7 @@ import { differenceInDays, startOfDay, isPast, isToday } from "date-fns";
 import type { Task, ProjectColumn, Subtask } from "@/lib/types/tasks";
 import { getAvatarColor, getInitials } from "@/lib/utils/avatar";
 import { cn } from "@/lib/utils";
+import { EMPTY } from "@/lib/copy";
 
 const priorityStyles: Record<string, string> = {
   low: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
@@ -142,7 +143,7 @@ export function ListView({
           {sorted.length === 0 ? (
             <TableRow>
               <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                No tasks match your filters.
+                {EMPTY.tasks.description}
               </TableCell>
             </TableRow>
           ) : (

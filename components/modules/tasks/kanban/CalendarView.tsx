@@ -20,6 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChevronLeft, ChevronRight, CalendarX } from "lucide-react";
 import type { Task, ProjectColumn } from "@/lib/types/tasks";
 import { cn } from "@/lib/utils";
+import { EMPTY } from "@/lib/copy";
 
 const priorityDotColor: Record<string, string> = {
   low: "bg-slate-400",

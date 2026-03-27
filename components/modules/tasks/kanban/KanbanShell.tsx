@@ -68,6 +68,7 @@ import { DEFAULT_FILTERS, filterColumns } from "@/lib/tasks/filters";
 import { getSubtasks, setSubtasks as persistSubtasks } from "@/lib/tasks/subtasks";
 import { TaskSheet } from "./TaskSheet";
 import { toast } from "sonner";
+import { DELETE, EMPTY, SUCCESS } from "@/lib/copy";
 import type { Task } from "@/lib/types/tasks";
 
 type Client = { id: string; name: string };
@@ -226,7 +227,7 @@ export function KanbanShell() {
         prev.map((p) => (p.id === selectedProjectId ? { ...p, name: trimmed } : p))
       );
       setRenameOpen(false);
-      toast.success("Board renamed.");
+      toast.success(SUCCESS.boardRenamed);
     } catch {
       toast.error("Couldn't rename the board. Try again?");
     }
@@ -240,7 +241,7 @@ export function KanbanShell() {
       setSelectedProjectId(null);
       setColumns([]);
       setProjects((prev) => prev.filter((p) => p.id !== selectedProjectId));
-      toast.success("Board deleted. Clean slate.");
+      toast.success(SUCCESS.boardDeleted);
     } catch {
       toast.error("Couldn't delete the board. Try again?");
     } finally {
@@ -311,7 +312,7 @@ export function KanbanShell() {
         )
       );
       setAddTaskOpen(false);
-      toast.success("Task added.");
+      toast.success(SUCCESS.taskCreated);
     } catch {
       toast.error("That task didn't save. Give it another shot.");
     } finally {
@@ -413,20 +414,19 @@ export function KanbanShell() {
               </DropdownMenu>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete &ldquo;{selectedBoard?.name}&rdquo;?</AlertDialogTitle>
+                  <AlertDialogTitle>{DELETE.board.title}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This permanently deletes the board and everything in it — columns, tasks,
-                    comments, attachments, and links. No undo.
+                    {DELETE.board.description}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogCancel>{DELETE.board.cancel}</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={handleDeleteBoard}
                     disabled={deleting}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    {deleting ? "Deleting..." : "Delete"}
+                    {deleting ? "Deleting..." : DELETE.board.confirm}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -716,7 +716,7 @@ export function KanbanShell() {
       {!selectedProjectId ? (
         <div className="flex-1 flex flex-col items-center justify-center rounded-md border border-dashed text-muted-foreground">
           <Columns3 className="mb-2 h-8 w-8" />
-          <p>Pick a board to dive in — or create a fresh one.</p>
+          <p>{EMPTY.board.description}</p>
         </div>
       ) : boardLoading ? (
         <div className="flex gap-4 flex-1">

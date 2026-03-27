@@ -104,6 +104,7 @@ import { SubtaskPanel } from "./SubtaskPanel";
 import { TagPicker } from "./TagPicker";
 import { DependencySection } from "./DependencyPicker";
 import { toast } from "sonner";
+import { DELETE, SUCCESS } from "@/lib/copy";
 
 type TaskDetail = Task & {
   comments: TaskComment[];
@@ -123,7 +124,7 @@ function timeAgo(dateStr: string) {
 }
 
 function dueDateContext(dateStr: string | null) {
-  if (!dateStr) return { text: "No due date", color: "text-muted-foreground/60 italic" };
+  if (!dateStr) return { text: "No deadline yet — add one when this gets real", color: "text-muted-foreground/60 italic" };
   const due = startOfDay(new Date(dateStr));
   const today = startOfDay(new Date());
   if (isToday(due)) return { text: "Due today", color: "text-amber-600 font-medium" };
@@ -224,9 +225,9 @@ export function TaskSheet({
       await deleteTask(detail.id);
       onTaskDeleted(detail.id);
       onClose();
-      toast.success("Task removed.");
+      toast.success(SUCCESS.taskDeleted);
     } catch {
-      toast.error("Couldn't delete that task. Try again?");
+      toast.error("Couldn't remove this task — try again?");
     } finally {
       setDeleting(false);
     }
@@ -284,16 +285,16 @@ export function TaskSheet({
                   </DropdownMenu>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Delete &ldquo;{detail.title}&rdquo;?</AlertDialogTitle>
+                      <AlertDialogTitle>{DELETE.task.title}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This permanently removes the task including all comments, attachments, and links.
+                        {DELETE.task.description}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel>{DELETE.task.cancel}</AlertDialogCancel>
                       <AlertDialogAction onClick={handleDeleteTask} disabled={deleting}
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                        {deleting ? "Deleting..." : "Delete"}
+                        {deleting ? "Deleting..." : DELETE.task.confirm}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -310,7 +311,7 @@ export function TaskSheet({
         {/* ─── BODY: TWO COLUMNS ─── */}
         {loading ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-            Loading task...
+            Unpacking this task…
           </div>
         ) : detail ? (
           <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -385,6 +386,7 @@ export function TaskSheet({
                   <CommentsSection
                     taskId={detail.id}
                     comments={detail.comments}
+                    profiles={profiles}
                     onAdded={(comment) =>
                       updateDetail((d) => ({
                         ...d,
@@ -416,7 +418,7 @@ export function TaskSheet({
                 <SidebarField icon={Columns3} label="Status">
                   <Select value={detail.column_id} onValueChange={async (v) => {
                     handleFieldChange({ column_id: v });
-                    try { await updateTask(detail.id, { column_id: v }); } catch { toast.error("Status didn't update."); }
+                    try { await updateTask(detail.id, { column_id: v }); } catch { toast.error("Status didn't stick — try again."); }
                   }}>
                     <SelectTrigger className="h-8 text-sm bg-muted/50 border-border/50">
                       <SelectValue>
@@ -434,7 +436,7 @@ export function TaskSheet({
                 <SidebarField icon={Flag} label="Priority">
                   <Select value={detail.priority || "low"} onValueChange={async (v) => {
                     handleFieldChange({ priority: v as TaskPriority });
-                    try { await updateTask(detail.id, { priority: v as TaskPriority }); } catch { toast.error("Priority didn't update."); }
+                    try { await updateTask(detail.id, { priority: v as TaskPriority }); } catch { toast.error("Priority didn't save — try again."); }
                   }}>
                     <SelectTrigger className="h-8 text-sm bg-muted/50 border-border/50">
                       <SelectValue>
@@ -472,7 +474,7 @@ export function TaskSheet({
                     onChange={async (e) => {
                       const val = e.target.value || null;
                       handleFieldChange({ due_date: val });
-                      try { await updateTask(detail.id, { due_date: val }); } catch { toast.error("Date didn't save."); }
+                      try { await updateTask(detail.id, { due_date: val }); } catch { toast.error("Date didn't save — try again."); }
                     }}
                     className="h-8 text-sm bg-muted/50 border-border/50"
                   />
@@ -482,7 +484,7 @@ export function TaskSheet({
                     </p>
                   )}
                   {!detail.due_date && (
-                    <p className="text-[10px] text-muted-foreground/50 italic">No due date</p>
+                    <p className="text-[10px] text-muted-foreground/50 italic">No deadline yet — add one when this gets real</p>
                   )}
                 </SidebarField>
 
@@ -499,7 +501,7 @@ export function TaskSheet({
                     }}
                     onBlur={async (e) => {
                       const num = e.target.value ? parseFloat(e.target.value) : null;
-                      try { await updateTask(detail.id, { cost: num }); } catch { toast.error("Cost didn't save."); }
+                      try { await updateTask(detail.id, { cost: num }); } catch { toast.error("Cost didn't save — try again."); }
                     }}
                     className="h-8 text-sm bg-muted/50 border-border/50"
                   />
@@ -594,12 +596,12 @@ function AssigneeField({
       profiles: { full_name: profile.full_name, avatar_url: profile.avatar_url, avatar_color: profile.avatar_color },
     };
     onChanged({ assignees: [...(task.assignees || []), newAssignee] });
-    try { await addAssignee(task.id, profile.id); } catch { toast.error("Couldn't add assignee."); }
+    try { await addAssignee(task.id, profile.id); } catch { toast.error("Couldn't add them — try again."); }
   }
 
   async function handleRemove(userId: string) {
     onChanged({ assignees: (task.assignees || []).filter((a) => a.user_id !== userId) });
-    try { await removeAssignee(task.id, userId); } catch { toast.error("Couldn't remove assignee."); }
+    try { await removeAssignee(task.id, userId); } catch { toast.error("Couldn't remove them — try again."); }
   }
 
   return (
@@ -627,7 +629,7 @@ function AssigneeField({
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground">
               <Plus className="h-3 w-3 mr-1" />
-              {(task.assignees || []).length === 0 ? "Add assignee" : "Add"}
+              {(task.assignees || []).length === 0 ? "Add someone" : "Add"}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -684,7 +686,7 @@ function ClientField({
         const nc = await createClientSimple(trimmed);
         onChanged({ client_id: nc.id, client_name: nc.name });
         await updateTask(task.id, { client_id: nc.id });
-      } catch { toast.error("Couldn't save client."); }
+      } catch { toast.error("Client didn't save — try again."); }
     }
   }
 
@@ -694,7 +696,7 @@ function ClientField({
       onChange={(e) => setValue(e.target.value)}
       onBlur={handleSave}
       onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-      placeholder="Add client..."
+      placeholder="Which brand or client?"
       className="h-8 text-sm bg-muted/50 border-border/50"
     />
   );
@@ -716,7 +718,7 @@ function TitleEditor({ taskId, title, onChanged }: { taskId: string; title: stri
     const trimmed = value.trim();
     if (!trimmed || trimmed === title) { setValue(title); return; }
     onChanged(trimmed);
-    try { await updateTask(taskId, { title: trimmed }); } catch { toast.error("Title didn't save."); }
+    try { await updateTask(taskId, { title: trimmed }); } catch { toast.error("Title didn't save — try again."); }
   }
 
   if (editing) {
@@ -751,13 +753,13 @@ function DescriptionSection({ taskId, description, onChanged }: { taskId: string
     timeoutRef.current = setTimeout(async () => {
       const trimmed = newValue.trim() || null;
       onChanged(trimmed);
-      try { await updateTask(taskId, { description: trimmed }); } catch { toast.error("Description didn't save."); }
+      try { await updateTask(taskId, { description: trimmed }); } catch { toast.error("Description didn't save — try again."); }
     }, 800);
   }
 
   return (
     <Textarea value={value} onChange={(e) => handleChange(e.target.value)}
-      placeholder="Add a description — context, blockers, requirements..."
+      placeholder="What does this task need? Context, references, wild ideas — anything that helps."
       rows={4} className="text-sm border-0 bg-transparent px-0 shadow-none resize-none focus-visible:ring-0" />
   );
 }
@@ -782,7 +784,7 @@ function AttachmentsSection({ taskId, attachments, onAdded, onRemoved }: {
         const att = await uploadAttachment(taskId, fd);
         onAdded(att);
       }
-    } catch { toast.error("Upload failed."); } finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
+    } catch { toast.error("Upload didn't work — try again."); } finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   }
 
   return (
@@ -802,7 +804,7 @@ function AttachmentsSection({ taskId, attachments, onAdded, onRemoved }: {
             <div key={att.id} className="group relative rounded-md border overflow-hidden">
               {att.url ? <img src={att.url} alt={att.file_name} className="h-20 w-full object-cover" /> :
                 <div className="flex h-20 items-center justify-center bg-muted text-xs text-muted-foreground">{att.file_name}</div>}
-              <button onClick={async () => { try { await deleteAttachment(att.id); onRemoved(att.id); } catch { toast.error("Couldn't remove file."); } }}
+              <button onClick={async () => { try { await deleteAttachment(att.id); onRemoved(att.id); } catch { toast.error("Couldn't remove that file — try again."); } }}
                 className="absolute right-1 top-1 rounded-full bg-background/80 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Trash2 className="h-3 w-3 text-destructive" />
               </button>
@@ -829,7 +831,7 @@ function LinksSection({ taskId, links, onAdded, onRemoved }: {
   async function handleAdd() {
     if (!url.trim()) return;
     try { const l = await addLink(taskId, url.trim(), label.trim()); onAdded(l); setUrl(""); setLabel(""); setAdding(false); }
-    catch { toast.error("Link didn't save."); }
+    catch { toast.error("Link didn't save — try again."); }
   }
 
   return (
@@ -855,7 +857,7 @@ function LinksSection({ taskId, links, onAdded, onRemoved }: {
           <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-primary hover:underline truncate">
             <ExternalLink className="h-3 w-3 shrink-0" /> {link.label || link.url}
           </a>
-          <button onClick={async () => { try { await deleteLink(link.id); onRemoved(link.id); } catch { toast.error("Couldn't remove link."); } }}
+          <button onClick={async () => { try { await deleteLink(link.id); onRemoved(link.id); } catch { toast.error("Couldn't remove that link — try again."); } }}
             className="text-muted-foreground/40 hover:text-destructive shrink-0"><Trash2 className="h-3.5 w-3.5" /></button>
         </div>
       ))}
@@ -867,17 +869,67 @@ function LinksSection({ taskId, links, onAdded, onRemoved }: {
 // COMMENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function CommentsSection({ taskId, comments, onAdded, onRemoved }: {
-  taskId: string; comments: TaskComment[]; onAdded: (c: TaskComment) => void; onRemoved: (id: string) => void;
+function CommentsSection({ taskId, comments, profiles, onAdded, onRemoved }: {
+  taskId: string; comments: TaskComment[]; profiles: Profile[]; onAdded: (c: TaskComment) => void; onRemoved: (id: string) => void;
 }) {
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const mentionResults = mentionQuery !== null
+    ? profiles.filter((p) => p.full_name?.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 5)
+    : [];
+
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const val = e.target.value;
+    setBody(val);
+    const pos = e.target.selectionStart;
+    const textBefore = val.slice(0, pos);
+    const atMatch = textBefore.match(/@(\w*)$/);
+    if (atMatch) {
+      setMentionQuery(atMatch[1]);
+      setMentionIndex(0);
+    } else {
+      setMentionQuery(null);
+    }
+  }
+
+  function insertMention(name: string) {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const pos = ta.selectionStart;
+    const textBefore = body.slice(0, pos);
+    const atPos = textBefore.lastIndexOf("@");
+    if (atPos === -1) return;
+    const before = body.slice(0, atPos);
+    const after = body.slice(pos);
+    const newBody = `${before}@${name} ${after}`;
+    setBody(newBody);
+    setMentionQuery(null);
+    setTimeout(() => {
+      const newPos = atPos + name.length + 2;
+      ta.focus();
+      ta.setSelectionRange(newPos, newPos);
+    }, 0);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { handleSubmit(); return; }
+    if (mentionQuery !== null && mentionResults.length > 0) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex((i) => Math.min(i + 1, mentionResults.length - 1)); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex((i) => Math.max(i - 1, 0)); return; }
+      if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); insertMention(mentionResults[mentionIndex].full_name); return; }
+      if (e.key === "Escape") { setMentionQuery(null); return; }
+    }
+  }
 
   async function handleSubmit() {
     if (!body.trim()) return;
     setSubmitting(true);
-    try { const c = await addComment(taskId, body.trim()); onAdded(c); setBody(""); }
-    catch { toast.error("Comment didn't post."); } finally { setSubmitting(false); }
+    try { const c = await addComment(taskId, body.trim()); onAdded(c); setBody(""); setMentionQuery(null); }
+    catch { toast.error("Comment didn't post — try again."); } finally { setSubmitting(false); }
   }
 
   return (
@@ -888,9 +940,33 @@ function CommentsSection({ taskId, comments, onAdded, onRemoved }: {
 
       {/* Comment input */}
       <div className="relative">
-        <Textarea value={body} onChange={(e) => setBody(e.target.value)}
-          placeholder="Write a comment... (⌘+Enter to send)" rows={2} className="text-sm pr-12"
-          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit(); }} />
+        <Textarea ref={textareaRef} value={body} onChange={handleChange}
+          placeholder="Say something — even a quick 'Let's do this' counts. (⌘+Enter to send)" rows={2} className="text-sm pr-12"
+          onKeyDown={handleKeyDown} />
+        {/* Mention dropdown */}
+        {mentionQuery !== null && mentionResults.length > 0 && (
+          <div className="absolute left-0 bottom-full mb-1 w-full rounded-md border bg-popover shadow-md z-50 py-1">
+            {mentionResults.map((p, i) => (
+              <button
+                key={p.id}
+                type="button"
+                className={cn(
+                  "flex items-center gap-2 w-full px-3 py-1.5 text-sm text-left hover:bg-accent",
+                  i === mentionIndex && "bg-accent"
+                )}
+                onMouseDown={(e) => { e.preventDefault(); insertMention(p.full_name); }}
+              >
+                <Avatar className="h-5 w-5">
+                  {p.avatar_url && <AvatarImage src={p.avatar_url} />}
+                  <AvatarFallback className={cn("text-[8px]", getAvatarColor(p.full_name).bg, getAvatarColor(p.full_name).text)}>
+                    {getAvatarInitials(p.full_name || "?")}
+                  </AvatarFallback>
+                </Avatar>
+                <span>{p.full_name}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button size="icon" variant="ghost" className="absolute right-2 bottom-2 h-7 w-7"
@@ -917,12 +993,20 @@ function CommentsSection({ taskId, comments, onAdded, onRemoved }: {
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold">{c.profiles?.full_name || "User"}</span>
                   <span className="text-[11px] text-muted-foreground">{timeAgo(c.created_at)}</span>
-                  <button onClick={async () => { try { await deleteComment(c.id); onRemoved(c.id); } catch { toast.error("Couldn't delete."); } }}
+                  <button onClick={async () => { try { await deleteComment(c.id); onRemoved(c.id); } catch { toast.error("Couldn't remove that — try again."); } }}
                     className="ml-auto text-muted-foreground/30 hover:text-destructive transition-colors">
                     <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
-                <p className="mt-1 text-sm text-foreground/80 whitespace-pre-wrap leading-relaxed">{c.body}</p>
+                <p className="mt-1 text-sm text-foreground/80 whitespace-pre-wrap leading-relaxed">
+                  {c.body.split(/(@\w[\w\s]*?)(?=\s|$)/g).map((part, i) =>
+                    part.startsWith("@") ? (
+                      <span key={i} className="text-primary font-medium">{part}</span>
+                    ) : (
+                      <span key={i}>{part}</span>
+                    )
+                  )}
+                </p>
               </div>
             </div>
           ))}

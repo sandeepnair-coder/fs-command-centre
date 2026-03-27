@@ -44,6 +44,7 @@ import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "@/lib/types/finance";
 import { formatINR, formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { SUCCESS } from "@/lib/copy";
 
 const categoryColors: Record<string, string> = {
   "Vendor / Supplier": "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
@@ -111,9 +112,9 @@ export default function ExpensesPage() {
       setExpenses((prev) => [exp, ...prev]);
       setFormOpen(false);
       resetForm();
-      toast.success("Expense logged.");
+      toast.success(SUCCESS.expenseLogged);
     } catch {
-      toast.error("Couldn't save that expense. Try again?");
+      toast.error("Expense didn't save \u2014 try again.");
     } finally {
       setCreating(false);
     }
@@ -123,9 +124,9 @@ export default function ExpensesPage() {
     try {
       await deleteExpense(id);
       setExpenses((prev) => prev.filter((e) => e.id !== id));
-      toast.success("Expense deleted.");
+      toast.success(SUCCESS.expenseDeleted);
     } catch {
-      toast.error("Couldn't delete. Try again?");
+      toast.error("Couldn't remove that \u2014 try again.");
     }
   }
 
@@ -198,8 +199,7 @@ export default function ExpensesPage() {
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border py-16 text-center text-muted-foreground">
           <Receipt className="h-10 w-10 mx-auto mb-3" />
-          <p className="text-sm font-medium">No expenses yet</p>
-          <p className="text-xs mt-1 mb-4">Track your spending — add your first expense</p>
+          <p className="text-sm font-medium mb-4">No expenses tracked yet. Which is either very disciplined or very suspicious.</p>
           <Button size="sm" onClick={() => { resetForm(); setFormOpen(true); }}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Add Expense
           </Button>
@@ -286,7 +286,7 @@ export default function ExpensesPage() {
               </div>
               <div className="space-y-1.5 col-span-2">
                 <Label className="text-sm">Vendor / Payee</Label>
-                <Input value={formVendor} onChange={(e) => setFormVendor(e.target.value)} placeholder="Who was paid?" className="h-9" />
+                <Input value={formVendor} onChange={(e) => setFormVendor(e.target.value)} placeholder="Who did you pay?" className="h-9" />
               </div>
               <div className="space-y-1.5 col-span-2">
                 <Label className="text-sm">Project (optional)</Label>
@@ -305,7 +305,7 @@ export default function ExpensesPage() {
               <div className="space-y-1.5 col-span-2">
                 <Label className="text-sm">Description</Label>
                 <Textarea value={formDescription} onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder="What was this expense for?" rows={2} />
+                  placeholder="What was this for?" rows={2} />
               </div>
             </div>
           </div>

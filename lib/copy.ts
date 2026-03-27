@@ -1,0 +1,178 @@
+// ─────────────────────────────────────────────
+// copy.ts — All UI text for Fynd Studio
+// Tone: funny, quirky, on-theme for a PM tool
+// ─────────────────────────────────────────────
+
+// ── QUOTES ───────────────────────────────────
+export const ROTATING_QUOTES = [
+  "If it's not in the board, it doesn't exist.",
+  "Moving cards to Done is the closest thing to therapy.",
+  "Deadline: a gentle suggestion with consequences.",
+  "In Progress means it's alive. Overdue means it's haunting you.",
+  "The task you keep dragging to tomorrow is the task that will drag you.",
+  "Nobody ever said 'I wish I had fewer completed tasks.'",
+  "Your backlog is not a graveyard. Probably.",
+  "A board with no Overdue cards is called a vacation.",
+  "The client is always right. The deadline is always wrong.",
+  "Due Soon is just Overdue in a nicer outfit.",
+  "Every great project started as a card nobody wanted to pick up.",
+  "Kanban: because chaos deserves columns.",
+  "The only thing worse than a full backlog is pretending it doesn't exist.",
+  "Add card. Assign. Forget. Panic. Deliver. Repeat.",
+  "Done is a myth. There is only 'Done for now.'",
+];
+
+// ── DELETE CONFIRMATIONS ──────────────────────
+export const DELETE = {
+  task: {
+    title: "Goodbye, little task.",
+    description: "This card will vanish forever. No backup. No undo. No mercy.",
+    confirm: "Nuke it",
+    cancel: "Wait, I need it",
+  },
+  board: {
+    title: "Delete this entire board?",
+    description:
+      "Every card, every column, every late night — gone. Are you absolutely sure?",
+    confirm: "Nuke it",
+    cancel: "I changed my mind",
+  },
+  column: {
+    title: "Delete this column?",
+    description:
+      "All cards inside will be deleted too. They never saw it coming.",
+    confirm: "Delete the column",
+    cancel: "Spare them",
+  },
+  member: {
+    title: "Remove this person?",
+    description:
+      "They'll lose access instantly. Their cards stay, their feelings won't.",
+    confirm: "Remove them",
+    cancel: "Keep the team together",
+  },
+  comment: {
+    title: "Delete this comment?",
+    description: "Your words. Your choice. Gone forever.",
+    confirm: "Delete it",
+    cancel: "I'll keep it",
+  },
+};
+
+// ── ERROR STATES ──────────────────────────────
+export const ERRORS = {
+  generic: {
+    title: "Something went sideways.",
+    description: "We're not sure what happened. Neither is the server.",
+    action: "Try again",
+  },
+  network: {
+    title: "The internet is being dramatic.",
+    description: "Check your connection. We'll be here when you're back.",
+    action: "Retry",
+  },
+  notFound: {
+    title: "This page took the day off.",
+    description: "It might have been deleted, moved, or never existed at all.",
+    action: "Go home",
+  },
+  unauthorized: {
+    title: "You're not supposed to be here.",
+    description: "Log in and try again. No sneaking.",
+    action: "Log in",
+  },
+  serverError: {
+    title: "The server is having a moment.",
+    description: "It's not you. It's definitely us. Give it a second.",
+    action: "Try again",
+  },
+  saveFailed: {
+    title: "Didn't save. Sorry.",
+    description: "Your changes are still here — try saving again.",
+    action: "Save again",
+  },
+  loadFailed: {
+    title: "Couldn't load this.",
+    description: "Data is being shy today. Refresh and try again.",
+    action: "Refresh",
+  },
+};
+
+// ── EMPTY STATES ─────────────────────────────
+export const EMPTY = {
+  board: {
+    title: "No boards yet.",
+    description: "Every empire starts with one board. Make yours.",
+    action: "Create a board",
+  },
+  column: {
+    title: "Nothing here.",
+    description: "This column is feeling lonely. Add a card to cheer it up.",
+    action: "Add card",
+  },
+  backlog: {
+    title: "Backlog is empty.",
+    description:
+      "Either you're incredibly on top of things, or you forgot to add tasks.",
+    action: "Add a task",
+  },
+  tasks: {
+    title: "No tasks found.",
+    description: "Filters too strict? Or are you actually done? Impressive.",
+    action: "Clear filters",
+  },
+  search: {
+    title: "Nothing matched.",
+    description: "Not a single result. Try different words, or try less words.",
+    action: "Clear search",
+  },
+  members: {
+    title: "Flying solo?",
+    description: "Add your team so you can assign blame — we mean tasks.",
+    action: "Add member",
+  },
+  finance: {
+    title: "No records yet.",
+    description: "Money comes and goes. Start tracking before it's just gone.",
+    action: "Add record",
+  },
+  mail: {
+    title: "Inbox zero. You did it.",
+    description: "Either everything is handled or nothing was sent. Both valid.",
+    action: null,
+  },
+  notifications: {
+    title: "All caught up.",
+    description: "No one needs anything from you right now. Enjoy it.",
+    action: null,
+  },
+  overdue: {
+    title: "No overdue tasks!",
+    description: "You're either very efficient or very good at ignoring dates.",
+    action: null,
+  },
+};
+
+// ── SUCCESS TOASTS ────────────────────────────
+export const SUCCESS = {
+  taskCreated: "Card added. The board grows.",
+  taskDeleted: "Gone. Like it never existed.",
+  taskMoved: "Card moved. Progress feels good.",
+  taskUpdated: "Saved. Nice.",
+  boardCreated: "New board, new chaos. Good luck.",
+  boardDeleted: "Board deleted. Clean slate.",
+  boardRenamed: "Renamed. Fresh identity.",
+  memberAdded: "Welcome to the team. Assign them something immediately.",
+  memberRemoved: "Removed. Their tasks remain.",
+  commentPosted: "Comment posted. Thoughts shared.",
+  copied: "Copied to clipboard.",
+  saved: "Saved.",
+  columnAdded: "Column added. More structure, less chaos.",
+  expenseLogged: "Expense logged. The books are watching.",
+  expenseDeleted: "Expense removed.",
+  invoiceCreated: "Invoice created. Money incoming (hopefully).",
+  invoiceUpdated: "Invoice updated.",
+  poCreated: "PO created. Vendor notified (eventually).",
+  poDeleted: "PO removed.",
+  poStatusUpdated: "Status updated.",
+};

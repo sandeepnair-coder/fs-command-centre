@@ -44,6 +44,7 @@ import type { PurchaseOrder, Vendor, POStatus } from "@/lib/types/finance";
 import { formatINR, formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { SUCCESS } from "@/lib/copy";
 
 const statusStyles: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
@@ -146,7 +147,7 @@ export default function PurchaseOrdersPage() {
       }
 
       if (vendorId === "__none__") {
-        toast.error("Select or create a vendor first.");
+        toast.error("Pick a vendor first \u2014 or add a new one.");
         setCreating(false);
         return;
       }
@@ -162,9 +163,9 @@ export default function PurchaseOrdersPage() {
 
       setOrders((prev) => [po, ...prev]);
       setFormOpen(false);
-      toast.success(`PO created — ${po.po_number}`);
+      toast.success(SUCCESS.poCreated);
     } catch {
-      toast.error("Couldn't create PO. Try again?");
+      toast.error("PO didn't save \u2014 try again.");
     } finally {
       setCreating(false);
     }
@@ -178,7 +179,7 @@ export default function PurchaseOrdersPage() {
       );
       toast.success(`PO status updated to ${statusLabels[newStatus]}`);
     } catch {
-      toast.error("Status update failed.");
+      toast.error("Status didn't update \u2014 try again.");
     }
   }
 
@@ -186,9 +187,9 @@ export default function PurchaseOrdersPage() {
     try {
       await deletePurchaseOrder(poId);
       setOrders((prev) => prev.filter((po) => po.id !== poId));
-      toast.success("PO deleted.");
+      toast.success(SUCCESS.poDeleted);
     } catch {
-      toast.error("Couldn't delete PO.");
+      toast.error("Couldn't remove that \u2014 try again.");
     }
   }
 
@@ -243,8 +244,7 @@ export default function PurchaseOrdersPage() {
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border py-16 text-center text-muted-foreground">
           <ShoppingCart className="h-10 w-10 mx-auto mb-3" />
-          <p className="text-sm font-medium">No purchase orders yet</p>
-          <p className="text-xs mt-1 mb-4">Create your first PO to start tracking vendor payments</p>
+          <p className="text-sm font-medium mb-4">No POs in the system. When you need to order something, we'll help you do it properly.</p>
           <Button size="sm" onClick={() => { resetForm(); setFormOpen(true); }}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Create PO
           </Button>
@@ -422,7 +422,7 @@ export default function PurchaseOrdersPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-sm">Notes</Label>
-              <Textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} rows={2} placeholder="Internal notes..." />
+              <Textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} rows={2} placeholder="Notes for your team\u2026" />
             </div>
           </div>
           <DialogFooter>

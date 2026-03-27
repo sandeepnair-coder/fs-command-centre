@@ -6,6 +6,21 @@ import { Dialog as SheetPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
+/** Clicks on portaled Radix surfaces (Select, Popover, etc.) register as "outside" the sheet; prevent dismiss. */
+function isPortaledOverlayInteraction(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false
+  return Boolean(
+    target.closest('[data-slot="select-content"]') ||
+      target.closest('[data-slot="popover-content"]') ||
+      target.closest('[data-slot="dropdown-menu-content"]') ||
+      target.closest('[data-slot="dropdown-menu-sub-content"]') ||
+      target.closest('[data-slot="alert-dialog-content"]') ||
+      target.closest("[data-radix-popper-content-wrapper]") ||
+      target.closest('[role="menu"]') ||
+      target.closest('[role="listbox"]')
+  )
+}
+
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
 }
@@ -28,13 +43,19 @@ function SheetPortal({
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />
 }
 
+/**
+ * Plain backdrop (not DialogPrimitive.Overlay).
+ * Radix Dialog with modal=false omits the overlay entirely; we still need a dimmed layer.
+ * Modal dialog also sets body pointer-events:none which breaks portaled Select/Menu — use modal={false} on Sheet when those are needed.
+ */
 function SheetOverlay({
   className,
   ...props
-}: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
+}: React.ComponentProps<"div">) {
   return (
-    <SheetPrimitive.Overlay
+    <div
       data-slot="sheet-overlay"
+      aria-hidden
       className={cn(
         "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className
@@ -49,6 +70,8 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  onPointerDownOutside,
+  onInteractOutside,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
@@ -59,6 +82,14 @@ function SheetContent({
       <SheetOverlay />
       <SheetPrimitive.Content
         data-slot="sheet-content"
+        onPointerDownOutside={(e) => {
+          if (isPortaledOverlayInteraction(e.target)) e.preventDefault()
+          onPointerDownOutside?.(e)
+        }}
+        onInteractOutside={(e) => {
+          if (isPortaledOverlayInteraction(e.target)) e.preventDefault()
+          onInteractOutside?.(e)
+        }}
         className={cn(
           "fixed z-50 flex flex-col gap-4 bg-background shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500",
           side === "right" &&

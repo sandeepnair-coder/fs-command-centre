@@ -36,6 +36,7 @@ import type { Invoice, InvoiceLineItem } from "@/lib/types/finance";
 import { formatINR, formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { SUCCESS } from "@/lib/copy";
 import { differenceInDays, startOfDay } from "date-fns";
 
 const statusStyles: Record<string, string> = {
@@ -118,9 +119,9 @@ export default function InvoicesPage() {
       });
       setInvoices((prev) => [inv, ...prev]);
       setFormOpen(false);
-      toast.success(`Invoice ${inv.invoice_number} created.`);
+      toast.success(SUCCESS.invoiceCreated);
     } catch {
-      toast.error("Couldn't create invoice.");
+      toast.error("Invoice didn't save \u2014 try again.");
     } finally {
       setCreating(false);
     }
@@ -130,9 +131,9 @@ export default function InvoicesPage() {
     try {
       await updateInvoiceStatus(id, status);
       setInvoices((prev) => prev.map((inv) => (inv.id === id ? { ...inv, status: status as Invoice["status"] } : inv)));
-      toast.success("Invoice updated.");
+      toast.success(SUCCESS.invoiceUpdated);
     } catch {
-      toast.error("Update failed.");
+      toast.error("That didn't save \u2014 try again.");
     }
   }
 
@@ -192,8 +193,7 @@ export default function InvoicesPage() {
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border py-16 text-center text-muted-foreground">
           <FileText className="h-10 w-10 mx-auto mb-3" />
-          <p className="text-sm font-medium">No invoices yet</p>
-          <p className="text-xs mt-1 mb-4">Create your first invoice to track payments</p>
+          <p className="text-sm font-medium mb-4">No invoices yet. Create one to keep the money side of things tidy.</p>
           <Button size="sm" onClick={() => { resetForm(); setFormOpen(true); }}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Create Invoice
           </Button>

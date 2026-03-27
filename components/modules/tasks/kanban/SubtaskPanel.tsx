@@ -158,7 +158,7 @@ export function SubtaskPanel({
         <Input
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
-          placeholder="Add a subtask..."
+          placeholder="What's the next small step?"
           className="h-8 text-sm"
           onKeyDown={(e) => {
             if (e.key === "Enter") handleAdd();

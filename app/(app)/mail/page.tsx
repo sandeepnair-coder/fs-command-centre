@@ -8,7 +8,7 @@ export default function MailPage() {
         <h1 className="text-2xl font-bold tracking-tight">Mail</h1>
       </div>
       <p className="text-muted-foreground">
-        Gmail-like shared inbox. Coming in Phase 3.
+        The shared inbox is on its way. Phase 3 — stay tuned.
       </p>
     </div>
   );
