@@ -12,7 +12,7 @@ export async function AuthButton() {
         <span className="text-sm hidden sm:block">
           {user.fullName || user.emailAddresses[0]?.emailAddress || ""}
         </span>
-        <UserButton afterSignOutUrl="/sign-in" />
+        <UserButton />
       </div>
     );
   }

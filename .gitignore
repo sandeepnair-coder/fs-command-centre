@@ -4,3 +4,4 @@ node_modules
 headlessui-main
 ui-main
 *.tsbuildinfo
+.vercel
