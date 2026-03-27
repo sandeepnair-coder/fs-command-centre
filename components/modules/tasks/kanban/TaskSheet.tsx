@@ -17,6 +17,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
   DropdownMenu,
@@ -234,7 +235,11 @@ export function TaskSheet({
   const currentColumn = detail ? columns.find((c) => c.id === detail.column_id) : null;
 
   return (
-    <Sheet open={!!taskId} onOpenChange={(open) => !open && onClose()}>
+    <Sheet
+      open={!!taskId}
+      modal={false}
+      onOpenChange={(open) => !open && onClose()}
+    >
       <SheetContent className="w-full sm:max-w-2xl lg:max-w-4xl p-0 flex flex-col overflow-hidden bg-muted">
         <SheetTitle className="sr-only">Task Details</SheetTitle>
 
@@ -414,11 +419,13 @@ export function TaskSheet({
                     try { await updateTask(detail.id, { column_id: v }); } catch { toast.error("Status didn't update."); }
                   }}>
                     <SelectTrigger className="h-8 text-sm bg-muted/50 border-border/50">
-                      <Badge variant="outline" className="text-xs">
-                        {currentColumn?.name || "Unknown"}
-                      </Badge>
+                      <SelectValue>
+                        <Badge variant="outline" className="text-xs">
+                          {currentColumn?.name || "Unknown"}
+                        </Badge>
+                      </SelectValue>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" sideOffset={4}>
                       {columns.map((col) => <SelectItem key={col.id} value={col.id}>{col.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -430,17 +437,19 @@ export function TaskSheet({
                     try { await updateTask(detail.id, { priority: v as TaskPriority }); } catch { toast.error("Priority didn't update."); }
                   }}>
                     <SelectTrigger className="h-8 text-sm bg-muted/50 border-border/50">
-                      <Badge variant="secondary" className={cn("text-xs gap-1.5",
-                        detail.priority === "urgent" && "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
-                        detail.priority === "high" && "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-                        detail.priority === "medium" && "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-                        detail.priority === "low" && "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-                      )}>
-                        <span className={cn("h-2 w-2 rounded-full", priorityConfig[detail.priority]?.dot || "bg-slate-400")} />
-                        {priorityConfig[detail.priority]?.label || "Low"}
-                      </Badge>
+                      <SelectValue>
+                        <Badge variant="secondary" className={cn("text-xs gap-1.5",
+                          detail.priority === "urgent" && "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
+                          detail.priority === "high" && "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+                          detail.priority === "medium" && "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+                          detail.priority === "low" && "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+                        )}>
+                          <span className={cn("h-2 w-2 rounded-full", priorityConfig[detail.priority]?.dot || "bg-slate-400")} />
+                          {priorityConfig[detail.priority]?.label || "Low"}
+                        </Badge>
+                      </SelectValue>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" sideOffset={4}>
                       {Object.entries(priorityConfig).map(([k, v]) => (
                         <SelectItem key={k} value={k}>
                           <div className="flex items-center gap-2">
