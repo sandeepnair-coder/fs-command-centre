@@ -115,7 +115,7 @@ export async function getColumns(projectId: string) {
   const supabase = await createClient();
 
   // Fetch columns and tasks in parallel (first wave)
-  const [columnsRes, tasksRes] = await Promise.all([
+  const [columnsRes, tasksRes, assigneesRes, membersRes] = await Promise.all([
     supabase
       .from("project_columns")
       .select("*")
@@ -123,12 +123,37 @@ export async function getColumns(projectId: string) {
       .order("position"),
     supabase
       .from("tasks")
-      .select(`*, task_assignees(user_id, profiles(full_name, avatar_url, avatar_color))`)
+      .select("*")
       .eq("project_id", projectId)
       .order("position"),
+    supabase
+      .from("task_assignees")
+      .select("task_id, user_id"),
+    supabase
+      .from("members")
+      .select("id, full_name, avatar_url, clerk_id"),
   ]);
   if (columnsRes.error) throw columnsRes.error;
   if (tasksRes.error) throw tasksRes.error;
+
+  // Build member lookup for assignee display
+  const memberMap: Record<string, { full_name: string; avatar_url: string | null }> = {};
+  (membersRes.data || []).forEach((m) => {
+    memberMap[m.id] = { full_name: m.full_name || "Unknown", avatar_url: m.avatar_url };
+    if (m.clerk_id) memberMap[m.clerk_id] = { full_name: m.full_name || "Unknown", avatar_url: m.avatar_url };
+  });
+
+  // Group assignees by task
+  const taskAssignees: Record<string, { task_id: string; user_id: string; profiles?: { full_name: string; avatar_url: string | null; avatar_color: string | null } }[]> = {};
+  (assigneesRes.data || []).forEach((a) => {
+    if (!taskAssignees[a.task_id]) taskAssignees[a.task_id] = [];
+    const member = memberMap[a.user_id];
+    taskAssignees[a.task_id].push({
+      task_id: a.task_id,
+      user_id: a.user_id,
+      profiles: member ? { full_name: member.full_name, avatar_url: member.avatar_url, avatar_color: null } : undefined,
+    });
+  });
 
   const columns = columnsRes.data || [];
   const tasks = tasksRes.data || [];
@@ -180,7 +205,7 @@ export async function getColumns(projectId: string) {
       .filter((t) => t.column_id === col.id)
       .map((t) => ({
         ...t,
-        assignees: t.task_assignees || [],
+        assignees: taskAssignees[t.id] || [],
         client_name: t.client_id ? clientMap[t.client_id] ?? null : null,
         comments_count: commentCounts[t.id] || 0,
         attachments_count: attachmentCounts[t.id] || 0,
@@ -258,12 +283,10 @@ export async function createTask(
       ...(opts?.due_date ? { due_date: opts.due_date } : {}),
       ...(opts?.client_id ? { client_id: opts.client_id } : {}),
     })
-    .select(
-      `*, task_assignees(user_id, profiles(full_name, avatar_url, avatar_color))`
-    )
+    .select("*")
     .single();
   if (error) throw error;
-  return { ...data, assignees: data.task_assignees || [], comments_count: 0, attachments_count: 0, links_count: 0 };
+  return { ...data, assignees: [], comments_count: 0, attachments_count: 0, links_count: 0 };
 }
 
 export async function updateTask(
@@ -314,19 +337,34 @@ export async function moveTask(
 export async function getTaskDetail(taskId: string) {
   const supabase = await createClient();
 
-  const { data: task, error } = await supabase
-    .from("tasks")
-    .select(
-      `*, task_assignees(user_id, profiles(full_name, avatar_url, avatar_color))`
-    )
-    .eq("id", taskId)
-    .single();
-  if (error) throw error;
+  const [taskRes, assigneesRes, membersRes] = await Promise.all([
+    supabase.from("tasks").select("*").eq("id", taskId).single(),
+    supabase.from("task_assignees").select("task_id, user_id").eq("task_id", taskId),
+    supabase.from("members").select("id, full_name, avatar_url, clerk_id"),
+  ]);
+  if (taskRes.error) throw taskRes.error;
+  const task = taskRes.data;
+
+  // Build assignees with member info
+  const memberMap: Record<string, { full_name: string; avatar_url: string | null }> = {};
+  (membersRes.data || []).forEach((m) => {
+    memberMap[m.id] = { full_name: m.full_name || "Unknown", avatar_url: m.avatar_url };
+    if (m.clerk_id) memberMap[m.clerk_id] = { full_name: m.full_name || "Unknown", avatar_url: m.avatar_url };
+  });
+
+  const assignees = (assigneesRes.data || []).map((a) => {
+    const member = memberMap[a.user_id];
+    return {
+      task_id: a.task_id,
+      user_id: a.user_id,
+      profiles: member ? { full_name: member.full_name, avatar_url: member.avatar_url, avatar_color: null } : undefined,
+    };
+  });
 
   const [commentsRes, attachmentsRes, linksRes] = await Promise.all([
     supabase
       .from("task_comments")
-      .select("*, profiles(full_name, avatar_url, avatar_color)")
+      .select("*")
       .eq("task_id", taskId)
       .order("created_at"),
     supabase
@@ -353,7 +391,7 @@ export async function getTaskDetail(taskId: string) {
 
   return {
     ...task,
-    assignees: task.task_assignees || [],
+    assignees,
     comments: commentsRes.data || [],
     attachments,
     links: linksRes.data || [],
@@ -408,7 +446,7 @@ export async function addComment(taskId: string, body: string) {
   const { data, error } = await supabase
     .from("task_comments")
     .insert({ task_id: taskId, author_id: null, body })
-    .select("*, profiles(full_name, avatar_url, avatar_color)")
+    .select("*")
     .single();
   if (error) throw error;
   return data;
