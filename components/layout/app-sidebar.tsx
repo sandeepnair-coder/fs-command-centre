@@ -15,11 +15,19 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { MemberRole } from "@/lib/types/members";
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  minRole?: MemberRole[]; // roles that can see this item
+};
+
+const navItems: NavItem[] = [
   { href: "/tasks", label: "Task Management", icon: ListChecks },
-  { href: "/finance", label: "Finance", icon: DollarSign },
-  { href: "/mail", label: "Mail", icon: Mail },
+  { href: "/finance", label: "Finance", icon: DollarSign, minRole: ["owner", "admin", "member"] },
+  { href: "/mail", label: "Mail", icon: Mail, minRole: ["owner", "admin", "member"] },
 ];
 
 function NavLink({
@@ -56,8 +64,12 @@ function NavLink({
   );
 }
 
-export function AppSidebar() {
+export function AppSidebar({ role = "member" }: { role?: MemberRole }) {
   const pathname = usePathname();
+
+  const visibleItems = navItems.filter(
+    (item) => !item.minRole || item.minRole.includes(role)
+  );
 
   return (
     <aside className="flex h-full w-56 flex-col border-r bg-card">
@@ -77,7 +89,7 @@ export function AppSidebar() {
       {/* Navigation */}
       <nav className="flex flex-1 flex-col px-3 pt-2">
         <div className="flex flex-col gap-1">
-          {navItems.map((item) => (
+          {visibleItems.map((item) => (
             <NavLink
               key={item.href}
               href={item.href}
