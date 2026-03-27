@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
 import type {
   Vendor,
   PurchaseOrder,
@@ -122,7 +123,7 @@ export async function createPurchaseOrder(po: {
   status?: POStatus;
 }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
   // Generate PO number
   const { data: poNumData } = await supabase.rpc("generate_po_number");
@@ -153,7 +154,7 @@ export async function createPurchaseOrder(po: {
       po_number: poNumber,
       vendor_id: po.vendor_id,
       project_id: po.project_id || null,
-      created_by: user?.id || null,
+      created_by: userId || null,
       status,
       subtotal,
       tax_amount: taxTotal,
@@ -247,13 +248,13 @@ export async function createExpense(expense: {
   status?: ExpenseStatus;
 }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
   const { data, error } = await supabase
     .from("expenses")
     .insert({
       ...expense,
-      created_by: user?.id || null,
+      created_by: userId || null,
       status: expense.status || "approved",
     })
     .select("*, tasks(title)")

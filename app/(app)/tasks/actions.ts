@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import type { TaskPriority } from "@/lib/types/tasks";
 
@@ -236,9 +237,7 @@ export async function createTask(
   opts?: { priority?: TaskPriority; due_date?: string | null; client_id?: string | null }
 ) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
   // Get max position in column
   const { data: existing } = await supabase
@@ -256,7 +255,7 @@ export async function createTask(
       column_id: columnId,
       title,
       position: nextPos,
-      created_by: user?.id || null,
+      created_by: userId || null,
       ...(opts?.priority ? { priority: opts.priority } : {}),
       ...(opts?.due_date ? { due_date: opts.due_date } : {}),
       ...(opts?.client_id ? { client_id: opts.client_id } : {}),
@@ -411,14 +410,12 @@ export async function removeAssignee(taskId: string, userId: string) {
 
 export async function addComment(taskId: string, body: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  const { userId } = await auth();
+  if (!userId) throw new Error("Not authenticated");
 
   const { data, error } = await supabase
     .from("task_comments")
-    .insert({ task_id: taskId, author_id: user.id, body })
+    .insert({ task_id: taskId, author_id: userId, body })
     .select("*, profiles(full_name, avatar_url, avatar_color)")
     .single();
   if (error) throw error;

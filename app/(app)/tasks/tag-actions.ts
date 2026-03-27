@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
 import type { Tag, TaskDependency } from "@/lib/types/tasks";
 
 // ─── Tags ───────────────────────────────────────────────────────────────────
@@ -77,14 +78,14 @@ export async function getTaskDependencies(taskId: string) {
 
 export async function addDependency(blockingTaskId: string, blockedTaskId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
   const { data, error } = await supabase
     .from("task_dependencies")
     .insert({
       blocking_task_id: blockingTaskId,
       blocked_task_id: blockedTaskId,
-      created_by: user?.id || null,
+      created_by: userId || null,
     })
     .select("*, blocking_task:blocking_task_id(id, title, is_completed), blocked_task:blocked_task_id(id, title, is_completed)")
     .single();
@@ -102,12 +103,12 @@ export async function removeDependency(depId: string) {
 
 export async function toggleTaskComplete(taskId: string, completed: boolean) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
   const updates: Record<string, unknown> = {
     is_completed: completed,
     completed_at: completed ? new Date().toISOString() : null,
-    completed_by: completed ? user?.id : null,
+    completed_by: completed ? userId : null,
   };
 
   const { error } = await supabase.from("tasks").update(updates).eq("id", taskId);
