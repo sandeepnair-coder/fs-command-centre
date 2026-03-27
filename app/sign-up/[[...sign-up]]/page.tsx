@@ -1,11 +1,12 @@
 import { SignUp } from "@clerk/nextjs";
-
-export const dynamic = "force-dynamic";
+import { Suspense } from "react";
 
 export default function SignUpPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
-      <SignUp />
+      <Suspense fallback={<div className="text-muted-foreground text-sm">Loading...</div>}>
+        <SignUp />
+      </Suspense>
     </div>
   );
 }
