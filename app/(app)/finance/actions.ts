@@ -1,7 +1,6 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { auth } from "@clerk/nextjs/server";
 import type {
   Vendor,
   PurchaseOrder,
@@ -123,7 +122,7 @@ export async function createPurchaseOrder(po: {
   status?: POStatus;
 }) {
   const supabase = await createClient();
-  const { userId } = await auth();
+  const userId = null; // Clerk IDs are strings, DB expects UUIDs — use null for now
 
   // Generate PO number
   const { data: poNumData } = await supabase.rpc("generate_po_number");
@@ -248,7 +247,7 @@ export async function createExpense(expense: {
   status?: ExpenseStatus;
 }) {
   const supabase = await createClient();
-  const { userId } = await auth();
+  const userId = null; // Clerk IDs are strings, DB expects UUIDs — use null for now
 
   const { data, error } = await supabase
     .from("expenses")

@@ -373,8 +373,9 @@ export async function getProfiles() {
   if (error) throw error;
 
   // Return in the Profile shape expected by the rest of the app
+  // Use member DB id (UUID) — compatible with task_assignees FK
   return (members || []).map((m) => ({
-    id: m.clerk_id || m.id, // Use clerk_id as the profile ID
+    id: m.id,
     full_name: m.full_name || m.email?.split("@")[0] || "Unknown",
     avatar_url: m.avatar_url || null,
     avatar_color: null,
