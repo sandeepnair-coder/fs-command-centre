@@ -1,7 +1,6 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import type { TaskPriority } from "@/lib/types/tasks";
 
@@ -237,7 +236,6 @@ export async function createTask(
   opts?: { priority?: TaskPriority; due_date?: string | null; client_id?: string | null }
 ) {
   const supabase = await createClient();
-  const { userId } = await auth();
 
   // Get max position in column
   const { data: existing } = await supabase
@@ -255,7 +253,7 @@ export async function createTask(
       column_id: columnId,
       title,
       position: nextPos,
-      created_by: userId || null,
+      created_by: null,
       ...(opts?.priority ? { priority: opts.priority } : {}),
       ...(opts?.due_date ? { due_date: opts.due_date } : {}),
       ...(opts?.client_id ? { client_id: opts.client_id } : {}),
@@ -366,26 +364,21 @@ export async function getTaskDetail(taskId: string) {
 
 export async function getProfiles() {
   const supabase = await createClient();
-  // Get active members with linked accounts
+  // Get active members — use members table directly (Clerk-based)
   const { data: members, error } = await supabase
     .from("members")
-    .select("user_id")
+    .select("id, full_name, avatar_url, clerk_id, email")
     .eq("status", "active")
-    .not("user_id", "is", null);
+    .order("full_name");
   if (error) throw error;
 
-  const userIds = (members || []).map((m) => m.user_id) as string[];
-  if (userIds.length === 0) return [];
-
-  // Fetch profiles for those user IDs
-  const { data: profiles, error: profilesError } = await supabase
-    .from("profiles")
-    .select("id, full_name, avatar_url, avatar_color")
-    .in("id", userIds)
-    .order("full_name");
-  if (profilesError) throw profilesError;
-
-  return profiles || [];
+  // Return in the Profile shape expected by the rest of the app
+  return (members || []).map((m) => ({
+    id: m.clerk_id || m.id, // Use clerk_id as the profile ID
+    full_name: m.full_name || m.email?.split("@")[0] || "Unknown",
+    avatar_url: m.avatar_url || null,
+    avatar_color: null,
+  }));
 }
 
 export async function addAssignee(taskId: string, userId: string) {
@@ -410,12 +403,10 @@ export async function removeAssignee(taskId: string, userId: string) {
 
 export async function addComment(taskId: string, body: string) {
   const supabase = await createClient();
-  const { userId } = await auth();
-  if (!userId) throw new Error("Not authenticated");
 
   const { data, error } = await supabase
     .from("task_comments")
-    .insert({ task_id: taskId, author_id: userId, body })
+    .insert({ task_id: taskId, author_id: null, body })
     .select("*, profiles(full_name, avatar_url, avatar_color)")
     .single();
   if (error) throw error;
