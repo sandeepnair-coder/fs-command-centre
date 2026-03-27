@@ -55,7 +55,7 @@ async function SettingsContent() {
         </Card>
 
         {isOwner && (
-          <Link href="/settings/admin" className="group">
+          <Link href="/settings/members" className="group">
             <Card className="transition-colors group-hover:border-primary/50">
               <CardHeader>
                 <div className="flex items-center gap-2">
