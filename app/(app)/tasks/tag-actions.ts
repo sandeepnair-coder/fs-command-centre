@@ -7,7 +7,7 @@ import type { Tag, TaskDependency } from "@/lib/types/tasks";
 
 export async function getAllTags(): Promise<Tag[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("tags").select("*").order("name");
+  const { data, error } = await supabase.from("tags").select("id, name, color").order("name").limit(100);
   if (error) throw error;
   return (data || []) as Tag[];
 }

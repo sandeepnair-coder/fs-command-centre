@@ -8,7 +8,7 @@ export async function getMembers(): Promise<Member[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("members")
-    .select("*")
+    .select("id, email, role, status, clerk_id, full_name, avatar_url, created_at")
     .order("created_at");
   if (error) throw error;
   return (data || []) as Member[];

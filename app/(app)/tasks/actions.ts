@@ -11,8 +11,9 @@ export async function getClients() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("clients")
-    .select("*")
-    .order("name");
+    .select("id, name")
+    .order("name")
+    .limit(200);
   if (error) throw error;
   return data;
 }
@@ -119,12 +120,12 @@ export async function getColumns(projectId: string) {
   const [columnsRes, tasksRes, assigneesRes, membersRes] = await Promise.all([
     supabase
       .from("project_columns")
-      .select("*")
+      .select("id, project_id, name, position, wip_limit, description, created_at")
       .eq("project_id", projectId)
       .order("position"),
     supabase
       .from("tasks")
-      .select("*")
+      .select("id, project_id, column_id, client_id, title, description, priority, due_date, cost, position, created_by, created_at, updated_at")
       .eq("project_id", projectId)
       .order("position"),
     supabase
@@ -341,7 +342,7 @@ export async function getTaskDetail(taskId: string) {
   const supabase = await createClient();
 
   const [taskRes, assigneesRes, membersRes] = await Promise.all([
-    supabase.from("tasks").select("*").eq("id", taskId).single(),
+    supabase.from("tasks").select("id, project_id, column_id, client_id, title, description, priority, due_date, cost, position, created_by, created_at, updated_at").eq("id", taskId).single(),
     supabase.from("task_assignees").select("task_id, user_id").eq("task_id", taskId),
     supabase.from("members").select("id, full_name, avatar_url, clerk_id"),
   ]);
@@ -367,19 +368,22 @@ export async function getTaskDetail(taskId: string) {
   const [commentsRes, attachmentsRes, linksRes] = await Promise.all([
     supabase
       .from("task_comments")
-      .select("*")
+      .select("id, task_id, author_id, body, created_at")
       .eq("task_id", taskId)
-      .order("created_at"),
+      .order("created_at")
+      .limit(100),
     supabase
       .from("task_attachments")
-      .select("*")
+      .select("id, task_id, storage_path, file_name, created_at")
       .eq("task_id", taskId)
-      .order("created_at"),
+      .order("created_at")
+      .limit(50),
     supabase
       .from("task_links")
-      .select("*")
+      .select("id, task_id, url, label, created_at")
       .eq("task_id", taskId)
-      .order("created_at"),
+      .order("created_at")
+      .limit(50),
   ]);
 
   // Generate signed URLs for attachments
@@ -394,12 +398,12 @@ export async function getTaskDetail(taskId: string) {
 
   // Enrich comments with author profile info
   const comments = (commentsRes.data || []).map((c) => {
-    const author = c.author_id ? memberMap[c.author_id] : null;
+    const author = c.author_id ? memberMap[c.author_id] : undefined;
     return {
       ...c,
       profiles: author
-        ? { full_name: author.full_name, avatar_url: author.avatar_url, avatar_color: null }
-        : null,
+        ? { full_name: author.full_name, avatar_url: author.avatar_url, avatar_color: null as string | null }
+        : undefined,
     };
   });
 
@@ -461,15 +465,15 @@ export async function addComment(taskId: string, body: string) {
   const { data, error } = await supabase
     .from("task_comments")
     .insert({ task_id: taskId, author_id: member?.id ?? null, body })
-    .select("*")
+    .select("id, task_id, author_id, body, created_at")
     .single();
   if (error) throw error;
 
   return {
     ...data,
     profiles: member
-      ? { full_name: member.full_name, avatar_url: member.avatar_url, avatar_color: null }
-      : null,
+      ? { full_name: member.full_name || "Unknown", avatar_url: member.avatar_url || null, avatar_color: null as string | null }
+      : undefined,
   };
 }
 

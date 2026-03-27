@@ -9,7 +9,7 @@ export async function getMembers() {
   const supabase = await createClient();
   const { data: members, error } = await supabase
     .from("members")
-    .select("*")
+    .select("id, email, role, status, user_id, clerk_id, full_name, avatar_url, created_at")
     .order("created_at");
   if (error) throw error;
 

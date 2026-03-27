@@ -21,8 +21,9 @@ export async function getVendors() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("vendors")
-    .select("*")
-    .order("name");
+    .select("id, name, gst_number, contact_person, email, phone, payment_terms")
+    .order("name")
+    .limit(200);
   if (error) throw error;
   return (data || []) as Vendor[];
 }
@@ -67,8 +68,9 @@ export async function getPurchaseOrders(filters?: {
   const supabase = await createClient();
   let query = supabase
     .from("purchase_orders")
-    .select("*, vendors(name), tasks(title)")
-    .order("created_at", { ascending: false });
+    .select("id, po_number, vendor_id, project_id, status, total_amount, currency, delivery_date, created_at, vendors(name), tasks(title)")
+    .order("created_at", { ascending: false })
+    .limit(500);
 
   if (filters?.status) query = query.eq("status", filters.status);
   if (filters?.vendor_id) query = query.eq("vendor_id", filters.vendor_id);
@@ -95,7 +97,7 @@ export async function getPurchaseOrderDetail(poId: string) {
       .single(),
     supabase
       .from("po_line_items")
-      .select("*")
+      .select("id, po_id, description, quantity, unit_price, tax_percent, discount_percent, line_total")
       .eq("po_id", poId)
       .order("created_at"),
   ]);
@@ -216,8 +218,9 @@ export async function getExpenses(filters?: {
   const supabase = await createClient();
   let query = supabase
     .from("expenses")
-    .select("*, tasks(title)")
-    .order("date", { ascending: false });
+    .select("id, date, amount, category, sub_category, vendor_payee, payment_method, project_id, description, status, created_at, tasks(title)")
+    .order("date", { ascending: false })
+    .limit(500);
 
   if (filters?.category) query = query.eq("category", filters.category);
   if (filters?.project_id) query = query.eq("project_id", filters.project_id);
@@ -284,8 +287,9 @@ export async function getInvoices(filters?: { type?: string; status?: string }) 
   const supabase = await createClient();
   let query = supabase
     .from("invoices")
-    .select("*, tasks(title)")
-    .order("created_at", { ascending: false });
+    .select("id, invoice_number, type, client_vendor_name, project_id, status, subtotal, tax_amount, total_amount, due_date, created_at, tasks(title)")
+    .order("created_at", { ascending: false })
+    .limit(500);
 
   if (filters?.type) query = query.eq("type", filters.type);
   if (filters?.status) query = query.eq("status", filters.status);
@@ -563,7 +567,8 @@ export async function getActiveProjects() {
   const { data, error } = await supabase
     .from("tasks")
     .select("id, title, cost, clients(name)")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(200);
   if (error) throw error;
   return (data || []).map((t: Record<string, unknown>) => ({
     id: t.id as string,
