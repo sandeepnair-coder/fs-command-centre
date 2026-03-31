@@ -758,6 +758,8 @@ export function KanbanShell() {
               setColumns={setColumns}
               subtasksMap={subtasksMap}
               onSubtasksChange={handleSubtasksChange}
+              profiles={profiles}
+              clients={clients}
             />
           )}
 
@@ -781,6 +783,8 @@ export function KanbanShell() {
             <TaskSheetWrapper
               taskId={selectedTaskIdForSheet}
               columns={columns}
+              profiles={profiles}
+              clients={clients}
               onClose={() => setSelectedTaskIdForSheet(null)}
               setColumns={setColumns}
               subtasksMap={subtasksMap}
@@ -796,6 +800,8 @@ export function KanbanShell() {
 function TaskSheetWrapper({
   taskId,
   columns,
+  profiles,
+  clients,
   onClose,
   setColumns,
   subtasksMap,
@@ -803,6 +809,8 @@ function TaskSheetWrapper({
 }: {
   taskId: string | null;
   columns: ProjectColumn[];
+  profiles: { id: string; full_name: string; avatar_url: string | null; avatar_color: string | null }[];
+  clients: { id: string; name: string }[];
   onClose: () => void;
   setColumns: React.Dispatch<React.SetStateAction<ProjectColumn[]>>;
   subtasksMap: Record<string, Subtask[]>;
@@ -857,6 +865,8 @@ function TaskSheetWrapper({
     <TaskSheet
       taskId={taskId}
       columns={columns}
+      profiles={profiles}
+      clients={clients}
       onClose={onClose}
       onTaskUpdated={handleTaskUpdated}
       onTaskStatusChanged={handleTaskStatusChanged}

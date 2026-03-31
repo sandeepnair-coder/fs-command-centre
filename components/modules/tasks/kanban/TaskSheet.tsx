@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   Sheet,
   SheetContent,
@@ -77,9 +77,7 @@ import {
   getTaskDetail,
   updateTask,
   deleteTask,
-  getClients,
   createClientSimple,
-  getProfiles,
   addAssignee,
   removeAssignee,
   addComment,
@@ -149,7 +147,10 @@ type Client = { id: string; name: string };
 
 export function TaskSheet({
   taskId,
+  initialTask,
   columns,
+  profiles,
+  clients,
   onClose,
   onTaskUpdated,
   onTaskStatusChanged,
@@ -158,7 +159,10 @@ export function TaskSheet({
   onSubtasksChange,
 }: {
   taskId: string | null;
+  initialTask: Task | null;
   columns: ProjectColumn[];
+  profiles: Profile[];
+  clients: { id: string; name: string }[];
   onClose: () => void;
   onTaskUpdated: (task: Task) => void;
   onTaskStatusChanged: (taskId: string, newColumnId: string) => void;
@@ -167,37 +171,36 @@ export function TaskSheet({
   onSubtasksChange?: (taskId: string, subtasks: Subtask[]) => void;
 }) {
   const [detail, setDetail] = useState<TaskDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [extrasLoading, setExtrasLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [taskTags, setTaskTags] = useState<import("@/lib/types/tasks").Tag[]>([]);
 
-  const loadDetail = useCallback(async (id: string) => {
-    setLoading(true);
-    try {
-      const data = await getTaskDetail(id);
-      setDetail(data as TaskDetail);
-    } catch {
-      setDetail(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Instantly show the task from card data, then lazy-load extras
   useEffect(() => {
-    if (taskId) {
-      loadDetail(taskId);
-      getProfiles().then(setProfiles).catch(() => {});
-      getClients().then(setClients).catch(() => {});
-      import("@/app/(app)/tasks/tag-actions").then(({ getTaskTags }) =>
-        getTaskTags(taskId).then(setTaskTags).catch(() => setTaskTags([]))
-      );
-    } else {
+    if (taskId && initialTask) {
+      // Immediately set detail with card data (empty extras)
+      setDetail({
+        ...initialTask,
+        comments: detail?.id === taskId ? detail.comments : [],
+        attachments: detail?.id === taskId ? detail.attachments : [],
+        links: detail?.id === taskId ? detail.links : [],
+      } as TaskDetail);
+
+      // Fetch full detail in background
+      setExtrasLoading(true);
+      getTaskDetail(taskId)
+        .then((data) => {
+          setDetail(data as TaskDetail);
+          setTaskTags(((data as Record<string, unknown>).tags as import("@/lib/types/tasks").Tag[]) || []);
+        })
+        .catch(() => {})
+        .finally(() => setExtrasLoading(false));
+    } else if (!taskId) {
       setDetail(null);
       setTaskTags([]);
     }
-  }, [taskId, loadDetail]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId]);
 
   function handleFieldChange(updates: Partial<Task>) {
     if (!detail) return;
@@ -309,11 +312,7 @@ export function TaskSheet({
         )}
 
         {/* ─── BODY: TWO COLUMNS ─── */}
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-            Unpacking this task…
-          </div>
-        ) : detail ? (
+        {detail ? (
           <div className="flex flex-1 min-h-0 overflow-hidden">
             {/* ─── LEFT: MAIN CONTENT (scrollable) ─── */}
             <ScrollArea className="flex-1 min-w-0">
@@ -338,7 +337,12 @@ export function TaskSheet({
                 </div>
 
                 {/* Attachments */}
-                <div className="rounded-xl border bg-card p-4">
+                <div className="rounded-xl border bg-card p-4 relative">
+                  {extrasLoading && detail.attachments.length === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-card/50 rounded-xl z-10">
+                      <div className="h-4 w-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+                    </div>
+                  )}
                   <AttachmentsSection
                     taskId={detail.id}
                     attachments={detail.attachments}
@@ -360,7 +364,12 @@ export function TaskSheet({
                 </div>
 
                 {/* Links */}
-                <div className="rounded-xl border bg-card p-4">
+                <div className="rounded-xl border bg-card p-4 relative">
+                  {extrasLoading && detail.links.length === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-card/50 rounded-xl z-10">
+                      <div className="h-4 w-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+                    </div>
+                  )}
                   <LinksSection
                     taskId={detail.id}
                     links={detail.links}
@@ -382,7 +391,12 @@ export function TaskSheet({
                 </div>
 
                 {/* Comments */}
-                <div className="rounded-xl border bg-card p-4">
+                <div className="rounded-xl border bg-card p-4 relative">
+                  {extrasLoading && detail.comments.length === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-card/50 rounded-xl z-10">
+                      <div className="h-4 w-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+                    </div>
+                  )}
                   <CommentsSection
                     taskId={detail.id}
                     comments={detail.comments}

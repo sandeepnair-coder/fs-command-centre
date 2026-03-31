@@ -32,14 +32,28 @@ export function KanbanBoard({
   setColumns,
   subtasksMap,
   onSubtasksChange,
+  profiles,
+  clients,
 }: {
   projectId: string;
   columns: ProjectColumn[];
   setColumns: React.Dispatch<React.SetStateAction<ProjectColumn[]>>;
   subtasksMap: Record<string, Subtask[]>;
   onSubtasksChange: (taskId: string, subtasks: Subtask[]) => void;
+  profiles: { id: string; full_name: string; avatar_url: string | null; avatar_color: string | null }[];
+  clients: { id: string; name: string }[];
 }) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  // Find the full task object from columns for instant sheet rendering
+  const selectedTask = useMemo(() => {
+    if (!selectedTaskId) return null;
+    for (const col of columns) {
+      const t = (col.tasks || []).find((t) => t.id === selectedTaskId);
+      if (t) return t;
+    }
+    return null;
+  }, [selectedTaskId, columns]);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
   const sensors = useSensors(
@@ -278,7 +292,10 @@ export function KanbanBoard({
 
       <TaskSheet
         taskId={selectedTaskId}
+        initialTask={selectedTask}
         columns={columns}
+        profiles={profiles}
+        clients={clients}
         onClose={() => setSelectedTaskId(null)}
         onTaskUpdated={handleTaskUpdated}
         onTaskStatusChanged={handleTaskStatusChanged}

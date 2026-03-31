@@ -341,15 +341,20 @@ export async function moveTask(
 export async function getTaskDetail(taskId: string) {
   const supabase = await createClient();
 
-  const [taskRes, assigneesRes, membersRes] = await Promise.all([
+  // Single wave — all 7 queries in parallel
+  const [taskRes, assigneesRes, membersRes, commentsRes, attachmentsRes, linksRes, tagsRes] = await Promise.all([
     supabase.from("tasks").select("id, project_id, column_id, client_id, title, description, priority, due_date, cost, position, created_by, created_at, updated_at").eq("id", taskId).single(),
     supabase.from("task_assignees").select("task_id, user_id").eq("task_id", taskId),
     supabase.from("members").select("id, full_name, avatar_url, clerk_id"),
+    supabase.from("task_comments").select("id, task_id, author_id, body, created_at").eq("task_id", taskId).order("created_at").limit(100),
+    supabase.from("task_attachments").select("id, task_id, storage_path, file_name, created_at").eq("task_id", taskId).order("created_at").limit(50),
+    supabase.from("task_links").select("id, task_id, url, label, created_at").eq("task_id", taskId).order("created_at").limit(50),
+    supabase.from("task_tags").select("tag_id, tags(id, name, color)").eq("task_id", taskId),
   ]);
   if (taskRes.error) throw taskRes.error;
   const task = taskRes.data;
 
-  // Build assignees with member info
+  // Build member lookup
   const memberMap: Record<string, { full_name: string; avatar_url: string | null }> = {};
   (membersRes.data || []).forEach((m) => {
     memberMap[m.id] = { full_name: m.full_name || "Unknown", avatar_url: m.avatar_url };
@@ -365,28 +370,7 @@ export async function getTaskDetail(taskId: string) {
     };
   });
 
-  const [commentsRes, attachmentsRes, linksRes] = await Promise.all([
-    supabase
-      .from("task_comments")
-      .select("id, task_id, author_id, body, created_at")
-      .eq("task_id", taskId)
-      .order("created_at")
-      .limit(100),
-    supabase
-      .from("task_attachments")
-      .select("id, task_id, storage_path, file_name, created_at")
-      .eq("task_id", taskId)
-      .order("created_at")
-      .limit(50),
-    supabase
-      .from("task_links")
-      .select("id, task_id, url, label, created_at")
-      .eq("task_id", taskId)
-      .order("created_at")
-      .limit(50),
-  ]);
-
-  // Generate signed URLs for attachments
+  // Generate signed URLs for attachments in parallel
   const attachments = await Promise.all(
     (attachmentsRes.data || []).map(async (att) => {
       const { data: urlData } = await supabase.storage
@@ -407,12 +391,18 @@ export async function getTaskDetail(taskId: string) {
     };
   });
 
+  // Extract tags
+  const tags = (tagsRes.data || [])
+    .map((tt: Record<string, unknown>) => tt.tags as { id: string; name: string; color: string } | null)
+    .filter((t): t is { id: string; name: string; color: string } => t !== null);
+
   return {
     ...task,
     assignees,
     comments,
     attachments,
     links: linksRes.data || [],
+    tags,
   };
 }
 
