@@ -809,6 +809,7 @@ function TaskSheetWrapper({
 }: {
   taskId: string | null;
   columns: ProjectColumn[];
+
   profiles: { id: string; full_name: string; avatar_url: string | null; avatar_color: string | null }[];
   clients: { id: string; name: string }[];
   onClose: () => void;
@@ -816,6 +817,11 @@ function TaskSheetWrapper({
   subtasksMap: Record<string, Subtask[]>;
   onSubtasksChange: (taskId: string, subtasks: Subtask[]) => void;
 }) {
+  // Find the task from columns for instant rendering
+  const initialTask = taskId
+    ? columns.flatMap((c) => c.tasks || []).find((t) => t.id === taskId) ?? null
+    : null;
+
   function handleTaskUpdated(updatedTask: Task) {
     setColumns((prev) =>
       prev.map((col) => ({
@@ -864,6 +870,7 @@ function TaskSheetWrapper({
   return (
     <TaskSheet
       taskId={taskId}
+      initialTask={initialTask}
       columns={columns}
       profiles={profiles}
       clients={clients}
