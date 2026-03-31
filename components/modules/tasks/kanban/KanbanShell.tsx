@@ -80,14 +80,22 @@ type Project = {
   clients: { name: string } | null;
 };
 
-export function KanbanShell() {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+export function KanbanShell({
+  initialClients = [],
+  initialProjects = [],
+  initialProfiles = [],
+}: {
+  initialClients?: Client[];
+  initialProjects?: Project[];
+  initialProfiles?: Profile[];
+} = {}) {
+  const [clients, setClients] = useState<Client[]>(initialClients);
+  const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [columns, setColumns] = useState<ProjectColumn[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>(initialProfiles);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialClients.length === 0 && initialProjects.length === 0);
   const [boardLoading, setBoardLoading] = useState(false);
 
   // Board delete
@@ -137,11 +145,13 @@ export function KanbanShell() {
     }
   }, []);
 
-  // Load data + restore saved board in one shot so board can start loading early
+  // Restore saved board; skip data fetch if server already provided it
   useEffect(() => {
     const saved = localStorage.getItem("fs_kanban_board");
     if (saved) setSelectedProjectId(saved);
-    loadData();
+    if (initialClients.length === 0 && initialProjects.length === 0) {
+      loadData();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
