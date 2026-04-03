@@ -13,8 +13,8 @@ export default async function TasksPage() {
   ]);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="mb-4">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="mb-4 shrink-0">
         <div className="flex items-center gap-2">
           <ListChecks className="h-6 w-6" />
           <h1 className="text-2xl font-bold tracking-tight">
@@ -25,13 +25,20 @@ export default async function TasksPage() {
           Organize work, track progress, get things done.
         </p>
       </div>
-      <Separator className="mb-4" />
-      <KanbanShell
-        initialClients={clients ?? []}
-        initialProjects={projects ?? []}
-        initialProfiles={profiles ?? []}
-      />
-      <BoardQuote />
+      <Separator className="mb-4 shrink-0" />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <KanbanShell
+          initialClients={clients ?? []}
+          initialProjects={projects ?? []}
+          initialProfiles={profiles ?? []}
+        />
+      </div>
+      {/* Flush to main bottom; vertical rhythm matches AppSidebar bottom (Separator + NavLink + pb-3) */}
+      <div className="-mx-6 -mb-6 shrink-0 border-t bg-card px-6 pb-3 pt-2">
+        <div className="flex min-h-9 items-center justify-center">
+          <BoardQuote />
+        </div>
+      </div>
     </div>
   );
 }

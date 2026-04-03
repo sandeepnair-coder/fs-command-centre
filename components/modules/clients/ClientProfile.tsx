@@ -1,0 +1,590 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ArrowLeft,
+  Globe,
+  Mail,
+  Phone,
+  MapPin,
+  Building2,
+  User,
+  Plus,
+  Trash2,
+  Check,
+  X,
+  Pencil,
+  FileText,
+  Brain,
+  Activity,
+  Palette,
+  ShieldCheck,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  updateClient,
+  deleteClient,
+  getClientContacts,
+  createClientContact,
+  deleteClientContact,
+  getClientFacts,
+  upsertClientFact,
+  acceptClientFact,
+  rejectClientFact,
+  getBrandAssets,
+  getWorkStreams,
+} from "@/app/(app)/clients/actions";
+import { getAuditLog } from "@/app/(app)/comms/actions";
+import type { Client, ClientContact, ClientFact, BrandAsset, WorkStream, AuditLogEvent } from "@/lib/types/comms";
+import { VERIFICATION_CONFIG } from "@/lib/types/comms";
+import { toast } from "sonner";
+import { SUCCESS } from "@/lib/copy";
+import { format } from "date-fns";
+
+export function ClientProfile({ client: initial }: { client: Client }) {
+  const router = useRouter();
+  const [client, setClient] = useState(initial);
+  const [contacts, setContacts] = useState<ClientContact[]>([]);
+  const [facts, setFacts] = useState<ClientFact[]>([]);
+  const [assets, setAssets] = useState<BrandAsset[]>([]);
+  const [streams, setStreams] = useState<WorkStream[]>([]);
+  const [auditLog, setAuditLog] = useState<AuditLogEvent[]>([]);
+
+  // Editing
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState(client);
+
+  // New contact dialog
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const [newContact, setNewContact] = useState({ name: "", role: "", email: "", phone: "" });
+
+  // New fact dialog
+  const [factDialogOpen, setFactDialogOpen] = useState(false);
+  const [newFact, setNewFact] = useState({ key: "", value: "" });
+
+  useEffect(() => {
+    Promise.all([
+      getClientContacts(client.id).catch(() => []),
+      getClientFacts(client.id).catch(() => []),
+      getBrandAssets(client.id).catch(() => []),
+      getWorkStreams(client.id).catch(() => []),
+      getAuditLog({ entity_type: "client", entity_id: client.id, limit: 30 }).catch(() => []),
+    ]).then(([c, f, a, s, l]) => {
+      setContacts(c);
+      setFacts(f);
+      setAssets(a);
+      setStreams(s);
+      setAuditLog(l);
+    });
+  }, [client.id]);
+
+  async function handleSave() {
+    try {
+      const updated = await updateClient(client.id, {
+        name: editForm.name,
+        company_name: editForm.company_name,
+        primary_email: editForm.primary_email,
+        website: editForm.website,
+        phone: editForm.phone,
+        timezone: editForm.timezone,
+        industry: editForm.industry,
+      });
+      setClient(updated);
+      setEditing(false);
+      toast.success(SUCCESS.clientUpdated);
+    } catch {
+      toast.error("Couldn't save. Try again?");
+    }
+  }
+
+  async function handleDelete() {
+    try {
+      await deleteClient(client.id);
+      toast.success(SUCCESS.clientDeleted);
+      router.push("/clients");
+    } catch {
+      toast.error("Couldn't delete. Try again?");
+    }
+  }
+
+  async function handleAddContact() {
+    if (!newContact.name.trim()) return;
+    try {
+      const c = await createClientContact({
+        client_id: client.id,
+        name: newContact.name.trim(),
+        role: newContact.role.trim() || undefined,
+        email: newContact.email.trim() || undefined,
+        phone: newContact.phone.trim() || undefined,
+      });
+      setContacts((prev) => [...prev, c]);
+      setContactDialogOpen(false);
+      setNewContact({ name: "", role: "", email: "", phone: "" });
+      toast.success(SUCCESS.contactAdded);
+    } catch {
+      toast.error("Couldn't add contact. Try again?");
+    }
+  }
+
+  async function handleAddFact() {
+    if (!newFact.key.trim() || !newFact.value.trim()) return;
+    try {
+      const f = await upsertClientFact({
+        client_id: client.id,
+        key: newFact.key.trim(),
+        value: newFact.value.trim(),
+        verification_status: "verified",
+      });
+      setFacts((prev) => [...prev.filter((x) => x.key !== f.key), f]);
+      setFactDialogOpen(false);
+      setNewFact({ key: "", value: "" });
+      toast.success(SUCCESS.saved);
+    } catch {
+      toast.error("Couldn't save fact. Try again?");
+    }
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Header */}
+      <div className="mb-4 shrink-0">
+        <button onClick={() => router.push("/clients")} className="mb-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="size-3" /> Back to Clients
+        </button>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            {client.logo_url ? (
+              <img src={client.logo_url} alt="" className="size-12 rounded-xl object-cover border" />
+            ) : (
+              <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-lg font-bold text-primary">
+                {client.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold tracking-tight truncate text-balance">{client.name}</h1>
+              <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                {client.website && (
+                  <span className="flex items-center gap-1">
+                    <Globe className="size-3" /> {client.website}
+                  </span>
+                )}
+                {client.primary_email && (
+                  <span className="flex items-center gap-1">
+                    <Mail className="size-3" /> {client.primary_email}
+                  </span>
+                )}
+                {client.industry && (
+                  <Badge variant="secondary" className="text-[10px]">{client.industry}</Badge>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => { setEditForm(client); setEditing(true); }}
+            >
+              <Pencil className="mr-1 size-3" /> Edit
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs text-destructive hover:text-destructive">
+                  <Trash2 className="mr-1 size-3" /> Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete {client.name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This removes the client, all contacts, facts, and brand assets. Tasks will keep their data but lose the client link.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Delete Client
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+      </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={editing} onOpenChange={setEditing}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Client</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <div className="space-y-1.5 col-span-2">
+              <Label className="text-sm">Name</Label>
+              <Input value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Company</Label>
+              <Input value={editForm.company_name || ""} onChange={(e) => setEditForm((p) => ({ ...p, company_name: e.target.value || null }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Industry</Label>
+              <Input value={editForm.industry || ""} onChange={(e) => setEditForm((p) => ({ ...p, industry: e.target.value || null }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Email</Label>
+              <Input value={editForm.primary_email || ""} onChange={(e) => setEditForm((p) => ({ ...p, primary_email: e.target.value || null }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Phone</Label>
+              <Input value={editForm.phone || ""} onChange={(e) => setEditForm((p) => ({ ...p, phone: e.target.value || null }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Website</Label>
+              <Input value={editForm.website || ""} onChange={(e) => setEditForm((p) => ({ ...p, website: e.target.value || null }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Timezone</Label>
+              <Input value={editForm.timezone || ""} onChange={(e) => setEditForm((p) => ({ ...p, timezone: e.target.value || null }))} placeholder="e.g. IST, EST" />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="ghost" size="sm">Cancel</Button></DialogClose>
+            <Button size="sm" onClick={handleSave}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Tabs */}
+      <Tabs defaultValue="overview" className="flex-1 min-h-0 flex flex-col">
+        <TabsList className="shrink-0 mb-4">
+          <TabsTrigger value="overview" className="gap-1 text-xs"><Building2 className="size-3" /> Overview</TabsTrigger>
+          <TabsTrigger value="contacts" className="gap-1 text-xs"><User className="size-3" /> Contacts</TabsTrigger>
+          <TabsTrigger value="brand" className="gap-1 text-xs"><Palette className="size-3" /> Brand & Web</TabsTrigger>
+          <TabsTrigger value="assets" className="gap-1 text-xs"><FileText className="size-3" /> Assets</TabsTrigger>
+          <TabsTrigger value="intelligence" className="gap-1 text-xs"><Brain className="size-3" /> Intelligence</TabsTrigger>
+          <TabsTrigger value="activity" className="gap-1 text-xs"><Activity className="size-3" /> Activity Log</TabsTrigger>
+        </TabsList>
+
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {/* ─── Overview ─── */}
+          <TabsContent value="overview" className="h-full mt-0">
+            <ScrollArea className="h-full">
+              <div className="grid gap-4 sm:grid-cols-2 pb-4">
+                <InfoCard icon={Building2} label="Company" value={client.company_name} />
+                <InfoCard icon={Globe} label="Website" value={client.website} />
+                <InfoCard icon={Mail} label="Email" value={client.primary_email} />
+                <InfoCard icon={Phone} label="Phone" value={client.phone} />
+                <InfoCard icon={MapPin} label="Timezone" value={client.timezone} />
+                <InfoCard icon={ShieldCheck} label="Industry" value={client.industry} />
+
+                {/* Work Streams */}
+                <div className="col-span-2 rounded-xl border bg-card p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground/50 mb-3">Work Streams</p>
+                  {streams.length === 0 ? (
+                    <p className="text-xs text-muted-foreground/60 italic">No work streams yet.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {streams.map((s) => (
+                        <Badge key={s.id} variant="outline" className="text-xs">{s.name}</Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          {/* ─── Contacts ─── */}
+          <TabsContent value="contacts" className="h-full mt-0">
+            <ScrollArea className="h-full">
+              <div className="space-y-3 pb-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">{contacts.length} contact{contacts.length !== 1 ? "s" : ""}</p>
+                  <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 text-xs">
+                        <Plus className="mr-1 size-3" /> Add Contact
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-sm">
+                      <DialogHeader><DialogTitle>New Contact</DialogTitle></DialogHeader>
+                      <div className="space-y-3 py-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Name <span className="text-destructive">*</span></Label>
+                          <Input value={newContact.name} onChange={(e) => setNewContact((p) => ({ ...p, name: e.target.value }))} autoFocus />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Role</Label>
+                          <Input value={newContact.role} onChange={(e) => setNewContact((p) => ({ ...p, role: e.target.value }))} placeholder="e.g. SPOC, Marketing Lead" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-sm">Email</Label>
+                            <Input value={newContact.email} onChange={(e) => setNewContact((p) => ({ ...p, email: e.target.value }))} />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-sm">Phone</Label>
+                            <Input value={newContact.phone} onChange={(e) => setNewContact((p) => ({ ...p, phone: e.target.value }))} />
+                          </div>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <DialogClose asChild><Button variant="ghost" size="sm">Cancel</Button></DialogClose>
+                        <Button size="sm" onClick={handleAddContact} disabled={!newContact.name.trim()}>Add</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                {contacts.map((c) => (
+                  <div key={c.id} className="rounded-xl border bg-card p-3 flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{c.name}</p>
+                        <Badge variant="secondary" className={cn("text-[10px]", VERIFICATION_CONFIG[c.verification_status].color)}>
+                          {VERIFICATION_CONFIG[c.verification_status].label}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        {c.role && <span>{c.role}</span>}
+                        {c.email && <span className="flex items-center gap-1"><Mail className="size-3" />{c.email}</span>}
+                        {c.phone && <span className="flex items-center gap-1"><Phone className="size-3" />{c.phone}</span>}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 text-muted-foreground hover:text-destructive"
+                      onClick={async () => {
+                        try { await deleteClientContact(c.id); setContacts((prev) => prev.filter((x) => x.id !== c.id)); }
+                        catch { toast.error("Couldn't remove contact."); }
+                      }}
+                      aria-label="Delete contact"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          {/* ─── Brand & Web ─── */}
+          <TabsContent value="brand" className="h-full mt-0">
+            <ScrollArea className="h-full">
+              <div className="space-y-3 pb-4">
+                <p className="text-sm font-medium">Brand & Digital Presence</p>
+                <p className="text-xs text-muted-foreground text-pretty">
+                  Social handles, website details, and brand positioning live here. Add facts below to populate this section.
+                </p>
+                {facts.filter((f) => ["website", "instagram", "linkedin", "facebook", "twitter", "youtube", "target_audience", "tone_voice", "positioning"].includes(f.key)).length === 0 ? (
+                  <div className="rounded-xl border border-dashed py-8 text-center text-muted-foreground">
+                    <Palette className="mx-auto mb-2 size-6" />
+                    <p className="text-xs">No brand facts yet. Add some from the Intelligence tab.</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {facts
+                      .filter((f) => ["website", "instagram", "linkedin", "facebook", "twitter", "youtube", "target_audience", "tone_voice", "positioning"].includes(f.key))
+                      .map((f) => (
+                        <FactCard key={f.id} fact={f} onAccept={async () => { const u = await acceptClientFact(f.id); setFacts((p) => p.map((x) => x.id === f.id ? u : x)); toast.success(SUCCESS.factAccepted); }} onReject={async () => { await rejectClientFact(f.id); setFacts((p) => p.filter((x) => x.id !== f.id)); toast.success(SUCCESS.factRejected); }} />
+                      ))}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          {/* ─── Assets ─── */}
+          <TabsContent value="assets" className="h-full mt-0">
+            <ScrollArea className="h-full">
+              <div className="space-y-3 pb-4">
+                <p className="text-sm font-medium">Brand Assets ({assets.length})</p>
+                {assets.length === 0 ? (
+                  <div className="rounded-xl border border-dashed py-8 text-center text-muted-foreground">
+                    <FileText className="mx-auto mb-2 size-6" />
+                    <p className="text-xs">No assets uploaded yet.</p>
+                    <p className="mt-1 text-[10px]">Brand kits, logos, guidelines, and decks will appear here.</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {assets.map((a) => (
+                      <div key={a.id} className="rounded-xl border bg-card p-3">
+                        <Badge variant="outline" className="text-[10px] mb-2">{a.type.replace("_", " ")}</Badge>
+                        <p className="text-sm truncate">{a.file_name}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          {/* ─── Intelligence ─── */}
+          <TabsContent value="intelligence" className="h-full mt-0">
+            <ScrollArea className="h-full">
+              <div className="space-y-3 pb-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Client Facts ({facts.length})</p>
+                  <Dialog open={factDialogOpen} onOpenChange={setFactDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 text-xs">
+                        <Plus className="mr-1 size-3" /> Add Fact
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-sm">
+                      <DialogHeader><DialogTitle>New Client Fact</DialogTitle></DialogHeader>
+                      <div className="space-y-3 py-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Key</Label>
+                          <Input value={newFact.key} onChange={(e) => setNewFact((p) => ({ ...p, key: e.target.value }))} placeholder="e.g. instagram, primary_spoc, tone_voice" autoFocus />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Value</Label>
+                          <Input value={newFact.value} onChange={(e) => setNewFact((p) => ({ ...p, value: e.target.value }))} placeholder="e.g. @greenleaf_official" />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <DialogClose asChild><Button variant="ghost" size="sm">Cancel</Button></DialogClose>
+                        <Button size="sm" onClick={handleAddFact} disabled={!newFact.key.trim() || !newFact.value.trim()}>Save Fact</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                {facts.length === 0 ? (
+                  <div className="rounded-xl border border-dashed py-8 text-center text-muted-foreground">
+                    <Brain className="mx-auto mb-2 size-6" />
+                    <p className="text-xs">No intelligence yet.</p>
+                    <p className="mt-1 text-[10px]">Facts will be stored here — both manual and AI-inferred (once connectors are enabled).</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {facts.map((f) => (
+                      <FactCard
+                        key={f.id}
+                        fact={f}
+                        onAccept={async () => { const u = await acceptClientFact(f.id); setFacts((p) => p.map((x) => x.id === f.id ? u : x)); toast.success(SUCCESS.factAccepted); }}
+                        onReject={async () => { await rejectClientFact(f.id); setFacts((p) => p.filter((x) => x.id !== f.id)); toast.success(SUCCESS.factRejected); }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          {/* ─── Activity Log ─── */}
+          <TabsContent value="activity" className="h-full mt-0">
+            <ScrollArea className="h-full">
+              <div className="space-y-2 pb-4">
+                <p className="text-sm font-medium">Activity Log</p>
+                {auditLog.length === 0 ? (
+                  <p className="text-xs text-muted-foreground/60 italic">No activity recorded yet.</p>
+                ) : (
+                  auditLog.map((e) => (
+                    <div key={e.id} className="flex items-start gap-2 rounded-lg border bg-card p-2.5">
+                      <Activity className="size-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                      <div>
+                        <p className="text-xs font-medium">{e.event_type.replace(/_/g, " ")}</p>
+                        <p className="text-[10px] text-muted-foreground tabular-nums">
+                          {format(new Date(e.created_at), "d MMM yyyy, h:mm a")} · {e.actor_type}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </div>
+      </Tabs>
+    </div>
+  );
+}
+
+// ─── Sub-components ─────────────────────────────────────────────────────────
+
+function InfoCard({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string | null }) {
+  return (
+    <div className="rounded-xl border bg-card p-3">
+      <p className="text-[11px] font-medium text-foreground/50 flex items-center gap-1.5 mb-1">
+        <Icon className="size-3" /> {label}
+      </p>
+      <p className={cn("text-sm", value ? "text-foreground" : "text-muted-foreground/50 italic")}>
+        {value || "Not set"}
+      </p>
+    </div>
+  );
+}
+
+function FactCard({
+  fact,
+  onAccept,
+  onReject,
+}: {
+  fact: ClientFact;
+  onAccept: () => void;
+  onReject: () => void;
+}) {
+  return (
+    <div className="rounded-xl border bg-card p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-medium text-foreground/50">{fact.key.replace(/_/g, " ")}</p>
+        <Badge variant="secondary" className={cn("text-[10px]", VERIFICATION_CONFIG[fact.verification_status].color)}>
+          {VERIFICATION_CONFIG[fact.verification_status].label}
+        </Badge>
+      </div>
+      <p className="mt-1 text-sm text-foreground truncate">{fact.value}</p>
+      {fact.confidence && (
+        <p className="mt-0.5 text-[10px] text-muted-foreground">Confidence: {fact.confidence}</p>
+      )}
+      {fact.verification_status === "inferred" && (
+        <div className="mt-2 flex gap-1.5">
+          <Button variant="outline" size="sm" className="h-6 text-[10px] text-emerald-600" onClick={onAccept}>
+            <Check className="mr-0.5 size-3" /> Accept
+          </Button>
+          <Button variant="outline" size="sm" className="h-6 text-[10px] text-destructive" onClick={onReject}>
+            <X className="mr-0.5 size-3" /> Reject
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}

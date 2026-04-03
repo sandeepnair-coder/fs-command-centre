@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import type { Task } from "@/lib/types/tasks";
 import {
   useDroppable,
 } from "@dnd-kit/core";
@@ -139,23 +140,53 @@ export function KanbanColumn({
     if (!trimmed) return;
     setTaskTitle("");
     setAddingTask(false);
+
+    // Optimistic: add a temporary card instantly
+    const tempId = `temp-${Date.now()}`;
+    const optimisticTask = {
+      id: tempId,
+      project_id: projectId,
+      column_id: column.id,
+      title: trimmed,
+      priority: "medium" as const,
+      position: Date.now(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setColumns((prev) =>
+      prev.map((c) =>
+        c.id === column.id
+          ? { ...c, tasks: [...(c.tasks || []), optimisticTask as Task] }
+          : c
+      )
+    );
+
     try {
       const task = await createTask(projectId, column.id, trimmed);
+      // Replace temp card with real one
       setColumns((prev) =>
         prev.map((c) =>
           c.id === column.id
-            ? { ...c, tasks: [...(c.tasks || []), task] }
+            ? { ...c, tasks: (c.tasks || []).map((t) => t.id === tempId ? task : t) }
             : c
         )
       );
     } catch {
+      // Remove the optimistic card on failure
+      setColumns((prev) =>
+        prev.map((c) =>
+          c.id === column.id
+            ? { ...c, tasks: (c.tasks || []).filter((t) => t.id !== tempId) }
+            : c
+        )
+      );
       toast.error("That task didn't save. Give it another shot.");
     }
   }
 
   return (
     <Card
-      className={`w-[280px] flex-shrink-0 flex flex-col max-h-[calc(100vh-10rem)] rounded-xl shadow-none ${
+      className={`w-[280px] flex-shrink-0 flex flex-col h-full rounded-xl shadow-none ${
         isOver ? "ring-2 ring-primary/30" : ""
       }`}
     >
@@ -277,8 +308,8 @@ export function KanbanColumn({
         </Popover>
       </CardHeader>
 
-      {/* ─── Body (droppable area) ─── */}
-      <CardContent className="overflow-y-auto px-2 pb-2 min-h-[80px]">
+      {/* ─── Body (droppable area — scrollable) ─── */}
+      <CardContent className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
         <div ref={setNodeRef} className="min-h-[60px]">
           <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
             <div className="space-y-2">

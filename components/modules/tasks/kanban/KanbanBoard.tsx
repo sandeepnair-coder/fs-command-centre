@@ -16,7 +16,6 @@ import {
   SortableContext,
   horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { KanbanColumn } from "./KanbanColumn";
 import { KanbanCard } from "./KanbanCard";
 import { TaskSheet } from "./TaskSheet";
@@ -241,7 +240,7 @@ export function KanbanBoard({
   }
 
   return (
-    <>
+    <div className="flex flex-col flex-1 min-h-0">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -249,9 +248,9 @@ export function KanbanBoard({
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <ScrollArea className="w-full flex-1">
+        <div className="w-full flex-1 min-h-0 overflow-x-auto overflow-y-hidden">
           <div
-            className="flex gap-4 pb-4 pt-1 px-1 items-start"
+            className="flex gap-4 pb-4 pt-1 px-1 h-full"
             style={{ minWidth: "max-content" }}
           >
             <SortableContext
@@ -274,8 +273,7 @@ export function KanbanBoard({
               ))}
             </SortableContext>
           </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+        </div>
 
         <DragOverlay>
           {activeTask ? (
@@ -303,6 +301,6 @@ export function KanbanBoard({
         subtasksMap={subtasksMap}
         onSubtasksChange={onSubtasksChange}
       />
-    </>
+    </div>
   );
 }

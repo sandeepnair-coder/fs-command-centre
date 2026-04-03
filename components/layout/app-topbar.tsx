@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import { Input } from "@/components/ui/input";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { ColorThemeSwitcher } from "@/components/color-theme-switcher";
 import { AuthButton } from "@/components/auth-button";
 import { Search } from "lucide-react";
 
@@ -19,7 +18,6 @@ export function AppTopbar() {
           disabled
         />
       </div>
-      <ColorThemeSwitcher />
       <ThemeSwitcher />
       <Suspense>
         <AuthButton />

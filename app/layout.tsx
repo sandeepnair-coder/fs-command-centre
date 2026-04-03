@@ -29,13 +29,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
-        <head>
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `(function(){try{var t=localStorage.getItem("fs_color_theme");if(t&&t!=="neutral")document.documentElement.setAttribute("data-theme",t)}catch(e){}})();`,
-            }}
-          />
-        </head>
+        <head />
         <body className={`${geistSans.className} antialiased`}>
           <ThemeProvider
             attribute="class"

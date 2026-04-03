@@ -125,7 +125,7 @@ export async function getColumns(projectId: string) {
       .order("position"),
     supabase
       .from("tasks")
-      .select("id, project_id, column_id, client_id, title, description, priority, due_date, cost, position, created_by, created_at, updated_at")
+      .select("id, project_id, column_id, client_id, work_stream_id, title, description, priority, due_date, cost, position, created_by, created_from_message_id, created_from_conversation_id, created_at, updated_at")
       .eq("project_id", projectId)
       .order("position"),
     supabase
@@ -162,12 +162,16 @@ export async function getColumns(projectId: string) {
 
   // Collect IDs needed for second wave
   const clientIds = [...new Set(tasks.map((t) => t.client_id).filter(Boolean) as string[])];
+  const workStreamIds = [...new Set(tasks.map((t) => t.work_stream_id).filter(Boolean) as string[])];
   const taskIds = tasks.map((t) => t.id);
 
-  // Second wave — clients + all 3 counts in parallel
-  const [clientsRes, commentsRes, attachmentsRes, linksRes] = await Promise.all([
+  // Second wave — clients, work streams + all counts in parallel
+  const [clientsRes, workStreamsRes, commentsRes, attachmentsRes, linksRes, relationsRes] = await Promise.all([
     clientIds.length > 0
       ? supabase.from("clients").select("id, name").in("id", clientIds)
+      : { data: [] as { id: string; name: string }[] },
+    workStreamIds.length > 0
+      ? supabase.from("work_streams").select("id, name").in("id", workStreamIds)
       : { data: [] as { id: string; name: string }[] },
     taskIds.length > 0
       ? supabase.from("task_comments").select("task_id").in("task_id", taskIds)
@@ -178,11 +182,19 @@ export async function getColumns(projectId: string) {
     taskIds.length > 0
       ? supabase.from("task_links").select("task_id").in("task_id", taskIds)
       : { data: [] as { task_id: string }[] },
+    taskIds.length > 0
+      ? supabase.from("card_relations").select("from_card_id, to_card_id").or(`from_card_id.in.(${taskIds.join(",")}),to_card_id.in.(${taskIds.join(",")})`)
+      : { data: [] as { from_card_id: string; to_card_id: string }[] },
   ]);
 
   const clientMap: Record<string, string> = {};
   ((clientsRes as { data: { id: string; name: string }[] }).data || []).forEach((c) => {
     clientMap[c.id] = c.name;
+  });
+
+  const workStreamMap: Record<string, string> = {};
+  ((workStreamsRes as { data: { id: string; name: string }[] }).data || []).forEach((w) => {
+    workStreamMap[w.id] = w.name;
   });
 
   const commentCounts: Record<string, number> = {};
@@ -200,6 +212,12 @@ export async function getColumns(projectId: string) {
     linkCounts[l.task_id] = (linkCounts[l.task_id] || 0) + 1;
   });
 
+  const relationCounts: Record<string, number> = {};
+  ((relationsRes as { data: { from_card_id: string; to_card_id: string }[] }).data || []).forEach((r) => {
+    relationCounts[r.from_card_id] = (relationCounts[r.from_card_id] || 0) + 1;
+    relationCounts[r.to_card_id] = (relationCounts[r.to_card_id] || 0) + 1;
+  });
+
   // Nest tasks under columns
   return columns.map((col) => ({
     ...col,
@@ -209,9 +227,11 @@ export async function getColumns(projectId: string) {
         ...t,
         assignees: taskAssignees[t.id] || [],
         client_name: t.client_id ? clientMap[t.client_id] ?? null : null,
+        work_stream_name: t.work_stream_id ? workStreamMap[t.work_stream_id] ?? null : null,
         comments_count: commentCounts[t.id] || 0,
         attachments_count: attachmentCounts[t.id] || 0,
         links_count: linkCounts[t.id] || 0,
+        relations_count: relationCounts[t.id] || 0,
       })),
   }));
 }
@@ -343,7 +363,7 @@ export async function getTaskDetail(taskId: string) {
 
   // Single wave — all 7 queries in parallel
   const [taskRes, assigneesRes, membersRes, commentsRes, attachmentsRes, linksRes, tagsRes] = await Promise.all([
-    supabase.from("tasks").select("id, project_id, column_id, client_id, title, description, priority, due_date, cost, position, created_by, created_at, updated_at").eq("id", taskId).single(),
+    supabase.from("tasks").select("id, project_id, column_id, client_id, work_stream_id, title, description, priority, due_date, cost, position, created_by, created_from_message_id, created_from_conversation_id, created_at, updated_at").eq("id", taskId).single(),
     supabase.from("task_assignees").select("task_id, user_id").eq("task_id", taskId),
     supabase.from("members").select("id, full_name, avatar_url, clerk_id"),
     supabase.from("task_comments").select("id, task_id, author_id, body, created_at").eq("task_id", taskId).order("created_at").limit(100),

@@ -136,10 +136,15 @@ export const EMPTY = {
     description: "Money comes and goes. Start tracking before it's just gone.",
     action: "Add record",
   },
-  mail: {
-    title: "Inbox zero. You did it.",
-    description: "Either everything is handled or nothing was sent. Both valid.",
-    action: null,
+  comms: {
+    title: "All quiet on the comms front.",
+    description: "Connect your channels to see client conversations flow in.",
+    action: "Set up connectors",
+  },
+  clients: {
+    title: "No clients yet.",
+    description: "Add your first client — every great relationship starts here.",
+    action: "Add client",
   },
   notifications: {
     title: "All caught up.",
@@ -167,6 +172,13 @@ export const SUCCESS = {
   commentPosted: "Comment posted. Thoughts shared.",
   copied: "Copied to clipboard.",
   saved: "Saved.",
+  clientCreated: "Client added. The relationship begins.",
+  clientDeleted: "Client removed.",
+  clientUpdated: "Client updated.",
+  contactAdded: "Contact added to the client.",
+  factAccepted: "Fact verified. Knowledge locked in.",
+  factRejected: "Fact rejected. Moving on.",
+  connectorUpdated: "Connector settings saved.",
   columnAdded: "Column added. More structure, less chaos.",
   expenseLogged: "Expense logged. The books are watching.",
   expenseDeleted: "Expense removed.",

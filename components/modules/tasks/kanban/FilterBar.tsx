@@ -17,6 +17,8 @@ import {
   LayoutGrid,
   List,
   CalendarDays,
+  Users,
+  Workflow,
 } from "lucide-react";
 import type { TaskFilters, ViewMode, Profile, ProjectColumn } from "@/lib/types/tasks";
 import { DEFAULT_FILTERS, getActiveFilterCount } from "@/lib/tasks/filters";
@@ -66,7 +68,7 @@ export function FilterBar({
   );
 
   return (
-    <div className="flex flex-col gap-2 pb-3">
+    <div className="flex flex-col gap-2 pb-3 shrink-0">
       <div className="flex items-center gap-2 flex-wrap">
         {/* Search */}
         <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -218,6 +220,28 @@ export function FilterBar({
             aria-label="Calendar view"
           >
             <CalendarDays className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => onViewModeChange("client")}
+            className={`h-8 w-8 flex items-center justify-center transition-colors ${
+              viewMode === "client"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-muted text-muted-foreground"
+            }`}
+            aria-label="Client view"
+          >
+            <Users className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => onViewModeChange("stream")}
+            className={`h-8 w-8 flex items-center justify-center transition-colors ${
+              viewMode === "stream"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-muted text-muted-foreground"
+            }`}
+            aria-label="Stream view"
+          >
+            <Workflow className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>

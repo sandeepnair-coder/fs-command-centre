@@ -13,11 +13,13 @@ export function BoardQuote() {
     return () => clearTimeout(t);
   }, []);
 
-  if (!quote) return <div className="py-4" />;
+  if (!quote) {
+    return null;
+  }
 
   return (
     <p
-      className="text-center text-xs text-muted-foreground/50 italic select-none py-4 transition-opacity duration-1000"
+      className="select-none text-center text-xs italic leading-5 text-muted-foreground/50 transition-opacity duration-1000"
       style={{ opacity: visible ? 1 : 0 }}
     >
       &ldquo;{quote}&rdquo;

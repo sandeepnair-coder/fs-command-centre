@@ -5,3 +5,7 @@ headlessui-main
 ui-main
 *.tsbuildinfo
 .vercel
+
+# OS
+.DS_Store
+*.DS_Store

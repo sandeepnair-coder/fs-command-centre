@@ -5,10 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback } from "react";
 import { cn } from "@/lib/utils";
 import {
-  Mail,
+  MessageSquareText,
   ListChecks,
   DollarSign,
   Settings,
+  Users,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -28,7 +29,8 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: "/tasks", label: "Task Management", icon: ListChecks },
   { href: "/finance", label: "Finance", icon: DollarSign, minRole: ["owner", "admin", "member"] },
-  { href: "/mail", label: "Mail", icon: Mail, minRole: ["owner", "admin", "member"] },
+  { href: "/comms", label: "Comms", icon: MessageSquareText, minRole: ["owner", "admin", "member"] },
+  { href: "/clients", label: "Clients", icon: Users, minRole: ["owner", "admin", "member"] },
 ];
 
 function NavLink({

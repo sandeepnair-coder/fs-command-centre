@@ -60,6 +60,8 @@ import { KanbanBoard } from "./KanbanBoard";
 import { FilterBar } from "./FilterBar";
 import { ListView } from "./ListView";
 import { CalendarView } from "./CalendarView";
+import { ClientView } from "./ClientView";
+import { StreamView } from "./StreamView";
 import { AnalyticsPanel } from "./AnalyticsPanel";
 import { NewBoardDialog } from "../new-project-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -279,6 +281,31 @@ export function KanbanShell({
     if (!trimmed) return;
 
     setNewTaskCreating(true);
+
+    // Optimistic: show the card instantly
+    const tempId = `temp-${Date.now()}`;
+    const optimisticTask = {
+      id: tempId,
+      project_id: selectedProjectId,
+      column_id: newTaskColumnId,
+      title: trimmed,
+      priority: newTaskPriority,
+      due_date: newTaskDueDate || null,
+      client_id: newTaskClientId !== "__none__" ? newTaskClientId : null,
+      position: Date.now(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as Task;
+    setColumns((prev) =>
+      prev.map((c) =>
+        c.id === newTaskColumnId
+          ? { ...c, tasks: [...(c.tasks || []), optimisticTask] }
+          : c
+      )
+    );
+    setAddTaskOpen(false);
+    toast.success(SUCCESS.taskCreated);
+
     try {
       // Handle inline client creation
       let resolvedClientId: string | null = null;
@@ -314,16 +341,23 @@ export function KanbanShell({
         }
       }
 
+      // Replace temp card with real one
       setColumns((prev) =>
         prev.map((c) =>
           c.id === newTaskColumnId
-            ? { ...c, tasks: [...(c.tasks || []), task] }
+            ? { ...c, tasks: (c.tasks || []).map((t) => t.id === tempId ? task : t) }
             : c
         )
       );
-      setAddTaskOpen(false);
-      toast.success(SUCCESS.taskCreated);
     } catch {
+      // Remove the optimistic card on failure
+      setColumns((prev) =>
+        prev.map((c) =>
+          c.id === newTaskColumnId
+            ? { ...c, tasks: (c.tasks || []).filter((t) => t.id !== tempId) }
+            : c
+        )
+      );
       toast.error("That task didn't save. Give it another shot.");
     } finally {
       setNewTaskCreating(false);
@@ -370,9 +404,9 @@ export function KanbanShell({
   const selectedBoard = projects.find((p) => p.id === selectedProjectId);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0 h-full overflow-hidden">
       {/* ─── Top Bar ─── */}
-      <div className="flex flex-wrap items-center gap-3 pb-3">
+      <div className="flex flex-wrap items-center gap-3 pb-3 shrink-0">
         {/* Left: board selector + options */}
         <div className="flex items-center gap-2">
           <Select
@@ -740,7 +774,7 @@ export function KanbanShell({
           ))}
         </div>
       ) : (
-        <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Analytics Panel */}
           {showAnalytics && (
             <AnalyticsPanel
@@ -788,7 +822,21 @@ export function KanbanShell({
             />
           )}
 
-          {/* TaskSheet for list/calendar views */}
+          {viewMode === "client" && (
+            <ClientView
+              columns={filteredColumns}
+              onTaskClick={setSelectedTaskIdForSheet}
+            />
+          )}
+
+          {viewMode === "stream" && (
+            <StreamView
+              columns={filteredColumns}
+              onTaskClick={setSelectedTaskIdForSheet}
+            />
+          )}
+
+          {/* TaskSheet for non-kanban views */}
           {viewMode !== "kanban" && (
             <TaskSheetWrapper
               taskId={selectedTaskIdForSheet}

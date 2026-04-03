@@ -9,7 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Calendar, IndianRupee, MessageSquare, Paperclip, UserCircle, Clock, CheckCircle2 } from "lucide-react";
+import { Calendar, IndianRupee, MessageSquare, Paperclip, UserCircle, Clock, CheckCircle2, Link2, Workflow } from "lucide-react";
 import type { Task, Subtask } from "@/lib/types/tasks";
 import { getAvatarColor, getInitials } from "@/lib/utils/avatar";
 import { cn } from "@/lib/utils";
@@ -121,15 +121,22 @@ export function KanbanCard({
         isCompleted && "opacity-60"
       )}
     >
-      {/* Top row: client + deadline badge + complete checkbox */}
+      {/* Top row: client + work stream + deadline badge */}
       <div className="flex items-center justify-between gap-1">
-        {task.client_name ? (
-          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide truncate">
-            {task.client_name}
-          </span>
-        ) : (
-          <span />
-        )}
+        <div className="flex items-center gap-1.5 min-w-0">
+          {task.client_name && (
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide truncate">
+              {task.client_name}
+            </span>
+          )}
+          {task.work_stream_name && (
+            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground/70 truncate">
+              <Workflow className="size-2.5 shrink-0" />
+              {task.work_stream_name}
+            </span>
+          )}
+          {!task.client_name && !task.work_stream_name && <span />}
+        </div>
 
         {deadlineStatus === "overdue" && (
           <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
@@ -261,6 +268,12 @@ export function KanbanCard({
             <span className="flex items-center gap-0.5 text-xs">
               <MessageSquare className="h-3.5 w-3.5" />
               {task.comments_count}
+            </span>
+          )}
+          {(task.relations_count ?? 0) > 0 && (
+            <span className="flex items-center gap-0.5 text-xs">
+              <Link2 className="h-3.5 w-3.5" />
+              {task.relations_count}
             </span>
           )}
         </div>

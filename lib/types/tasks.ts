@@ -16,6 +16,7 @@ export type Task = {
   project_id: string;
   column_id: string;
   client_id: string | null;
+  work_stream_id: string | null;
   title: string;
   description: string | null;
   priority: TaskPriority;
@@ -23,13 +24,17 @@ export type Task = {
   cost: number | null;
   position: number;
   created_by: string | null;
+  created_from_message_id: string | null;
+  created_from_conversation_id: string | null;
   created_at: string;
   updated_at: string;
   assignees?: TaskAssignee[];
   client_name?: string | null;
+  work_stream_name?: string | null;
   comments_count?: number;
   attachments_count?: number;
   links_count?: number;
+  relations_count?: number;
 };
 
 export type TaskAssignee = {
@@ -133,7 +138,7 @@ export type Subtask = {
 
 // ─── Filter / View types ─────────────────────────────────────────────────────
 
-export type ViewMode = "kanban" | "list" | "calendar";
+export type ViewMode = "kanban" | "list" | "calendar" | "client" | "stream";
 
 export type TaskFilters = {
   search: string;
