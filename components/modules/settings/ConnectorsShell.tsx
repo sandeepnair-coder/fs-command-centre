@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getConnectorConfigs, updateConnectorConfig, getAuditLog } from "@/app/(app)/comms/actions";
+import { testOpenClawConnection } from "@/app/(app)/comms/openclaw-actions";
 import { CONNECTOR_MODES, CONNECTOR_SCOPES } from "@/lib/types/comms";
 import type { ConnectorConfig, ConnectorMode, AuditLogEvent } from "@/lib/types/comms";
 import { toast } from "sonner";
@@ -51,17 +52,39 @@ export function ConnectorsShell() {
   const [auditLog, setAuditLog] = useState<AuditLogEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAudit, setShowAudit] = useState(false);
+  const [healthStatus, setHealthStatus] = useState<{ connected: boolean; status: string; version?: string } | null>(null);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     Promise.all([
       getConnectorConfigs().catch(() => []),
       getAuditLog({ entity_type: "connector_config", limit: 20 }).catch(() => []),
-    ]).then(([c, a]) => {
+      testOpenClawConnection().catch(() => ({ connected: false, status: "unreachable" })),
+    ]).then(([c, a, h]) => {
       setConfigs(c as ConnectorConfig[]);
       setAuditLog(a);
+      setHealthStatus(h);
       setLoading(false);
     });
   }, []);
+
+  async function handleTestConnection() {
+    setTesting(true);
+    try {
+      const result = await testOpenClawConnection();
+      setHealthStatus(result);
+      if (result.connected) {
+        toast.success("Open Claw is connected and responding.");
+      } else {
+        toast.error(`Open Claw not reachable: ${result.status}`);
+      }
+    } catch {
+      setHealthStatus({ connected: false, status: "unreachable" });
+      toast.error("Could not reach Open Claw.");
+    } finally {
+      setTesting(false);
+    }
+  }
 
   async function handleModeChange(config: ConnectorConfig, mode: ConnectorMode) {
     const enabled = mode !== "disabled";
@@ -119,17 +142,55 @@ export function ConnectorsShell() {
                   variant="outline"
                   className={cn(
                     "text-[10px]",
-                    openClaw.enabled
+                    healthStatus?.connected
                       ? "border-emerald-300 text-emerald-600"
-                      : "border-muted text-muted-foreground"
+                      : openClaw.enabled
+                        ? "border-amber-300 text-amber-600"
+                        : "border-muted text-muted-foreground"
                   )}
                 >
-                  {openClaw.enabled ? "Connected" : "Not configured"}
+                  {healthStatus?.connected
+                    ? "Connected"
+                    : openClaw.enabled
+                      ? "Enabled (offline)"
+                      : "Not configured"}
                 </Badge>
               </div>
             </CardHeader>
 
             <CardContent className="space-y-4">
+              {/* Connection Status */}
+              <div className="rounded-lg border p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-medium text-foreground/60">Connection Status</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={handleTestConnection}
+                    disabled={testing}
+                  >
+                    {testing ? "Testing..." : "Test Connection"}
+                  </Button>
+                </div>
+                {healthStatus && (
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "size-2 rounded-full",
+                      healthStatus.connected ? "bg-emerald-500" : "bg-red-500"
+                    )} />
+                    <span className="text-xs">
+                      {healthStatus.connected
+                        ? `Online${healthStatus.version ? ` (v${healthStatus.version})` : ""}`
+                        : healthStatus.status}
+                    </span>
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground tabular-nums">
+                  Endpoint: {process.env.NEXT_PUBLIC_OPENCLAW_API_URL || "configured server-side"}
+                </p>
+              </div>
+
               {/* Mode */}
               <div>
                 <p className="text-[11px] font-medium text-foreground/60 mb-1.5">Operating Mode</p>
