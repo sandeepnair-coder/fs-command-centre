@@ -94,6 +94,12 @@ export type BrandAsset = {
 
 // ─── Conversations / Messages ────────────────────────────────────────────────
 
+export type ConversationStatus = "open" | "waiting_on_client" | "waiting_on_us" | "approval_pending" | "resolved" | "archived";
+export type ConversationPriority = "low" | "normal" | "high" | "urgent";
+export type RelationshipHealth = "active" | "at_risk" | "stale" | "awaiting_approval" | "overloaded";
+export type WaitingOn = "client" | "team" | "approval" | "external";
+export type Sentiment = "positive" | "neutral" | "concerned" | "urgent" | "frustrated";
+
 export type Conversation = {
   id: string;
   channel: ChannelType;
@@ -104,12 +110,29 @@ export type Conversation = {
   last_message_at: string;
   participants: string[];
   is_resolved: boolean;
+  status: ConversationStatus;
+  priority: ConversationPriority;
+  follow_up_at: string | null;
+  follow_up_owner: string | null;
+  linked_project_id: string | null;
+  last_client_reply_at: string | null;
+  last_team_reply_at: string | null;
+  relationship_health: RelationshipHealth;
+  waiting_on: WaitingOn | null;
+  extracted_asks: { text: string; resolved: boolean }[];
+  extracted_decisions: { text: string; date: string }[];
+  extracted_deadlines: { text: string; date: string }[];
+  ai_summary: string | null;
+  sentiment: Sentiment | null;
   created_at: string;
   updated_at: string;
   // Joined
   client_name?: string | null;
+  client_industry?: string | null;
+  project_name?: string | null;
   message_count?: number;
   unread_count?: number;
+  linked_task_count?: number;
 };
 
 export type CommsMessage = {
@@ -123,7 +146,23 @@ export type CommsMessage = {
   body_text: string;
   classification: MessageClassification | null;
   has_attachments: boolean;
+  is_from_client: boolean;
   source_url: string | null;
+  extracted_entities: Record<string, unknown> | null;
+  linked_task_ids: string[];
+  linked_fact_ids: string[];
+  created_at: string;
+};
+
+export type FollowUpReminder = {
+  id: string;
+  conversation_id: string | null;
+  client_id: string | null;
+  task_id: string | null;
+  reminder_at: string;
+  note: string | null;
+  status: "pending" | "done" | "snoozed" | "cancelled";
+  owner_id: string | null;
   created_at: string;
 };
 
@@ -239,4 +278,36 @@ export const CLASSIFICATION_CONFIG: Record<MessageClassification, { label: strin
   approval: { label: "Approval", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" },
   blocker: { label: "Blocker", color: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" },
   follow_up: { label: "Follow-up", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
+};
+
+export const STATUS_CONFIG: Record<ConversationStatus, { label: string; color: string; dot: string }> = {
+  open: { label: "Open", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300", dot: "bg-blue-500" },
+  waiting_on_client: { label: "Waiting on Client", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300", dot: "bg-amber-500" },
+  waiting_on_us: { label: "Needs Reply", color: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300", dot: "bg-red-500" },
+  approval_pending: { label: "Approval Pending", color: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300", dot: "bg-violet-500" },
+  resolved: { label: "Resolved", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300", dot: "bg-emerald-500" },
+  archived: { label: "Archived", color: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400", dot: "bg-gray-400" },
+};
+
+export const HEALTH_CONFIG: Record<RelationshipHealth, { label: string; color: string; dot: string }> = {
+  active: { label: "Active", color: "text-emerald-600", dot: "bg-emerald-500" },
+  at_risk: { label: "At Risk", color: "text-amber-600", dot: "bg-amber-500" },
+  stale: { label: "Stale", color: "text-gray-500", dot: "bg-gray-400" },
+  awaiting_approval: { label: "Awaiting Approval", color: "text-violet-600", dot: "bg-violet-500" },
+  overloaded: { label: "Overloaded", color: "text-red-600", dot: "bg-red-500" },
+};
+
+export const PRIORITY_CONFIG: Record<ConversationPriority, { label: string; dot: string }> = {
+  low: { label: "Low", dot: "bg-gray-400" },
+  normal: { label: "Normal", dot: "bg-blue-400" },
+  high: { label: "High", dot: "bg-amber-500" },
+  urgent: { label: "Urgent", dot: "bg-red-500" },
+};
+
+export const SENTIMENT_CONFIG: Record<Sentiment, { label: string; color: string }> = {
+  positive: { label: "Positive", color: "text-emerald-600" },
+  neutral: { label: "Neutral", color: "text-gray-500" },
+  concerned: { label: "Concerned", color: "text-amber-600" },
+  urgent: { label: "Urgent", color: "text-red-600" },
+  frustrated: { label: "Frustrated", color: "text-red-700" },
 };
