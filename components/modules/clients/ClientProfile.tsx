@@ -67,6 +67,8 @@ import {
   acceptClientFact,
   rejectClientFact,
   getBrandAssets,
+  createBrandAsset,
+  deleteBrandAsset,
   getWorkStreams,
 } from "@/app/(app)/clients/actions";
 import { getAuditLog } from "@/app/(app)/comms/actions";
@@ -96,6 +98,14 @@ export function ClientProfile({ client: initial }: { client: Client }) {
   // New fact dialog
   const [factDialogOpen, setFactDialogOpen] = useState(false);
   const [newFact, setNewFact] = useState({ key: "", value: "" });
+
+  // Brand field dialog
+  const [brandDialogOpen, setBrandDialogOpen] = useState(false);
+  const [brandField, setBrandField] = useState({ key: "", value: "" });
+
+  // Asset dialog
+  const [assetDialogOpen, setAssetDialogOpen] = useState(false);
+  const [newAsset, setNewAsset] = useState({ file_name: "", storage_url: "", type: "other" as BrandAsset["type"] });
 
   useEffect(() => {
     Promise.all([
@@ -176,6 +186,42 @@ export function ClientProfile({ client: initial }: { client: Client }) {
       toast.success(SUCCESS.saved);
     } catch {
       toast.error("Couldn't save fact. Try again?");
+    }
+  }
+
+  async function handleAddBrandField() {
+    if (!brandField.key.trim() || !brandField.value.trim()) return;
+    try {
+      const f = await upsertClientFact({
+        client_id: client.id,
+        key: brandField.key.trim(),
+        value: brandField.value.trim(),
+        verification_status: "verified",
+      });
+      setFacts((prev) => [...prev.filter((x) => x.key !== f.key), f]);
+      setBrandDialogOpen(false);
+      setBrandField({ key: "", value: "" });
+      toast.success(SUCCESS.saved);
+    } catch {
+      toast.error("Couldn't save. Try again?");
+    }
+  }
+
+  async function handleAddAsset() {
+    if (!newAsset.file_name.trim() || !newAsset.storage_url.trim()) return;
+    try {
+      const a = await createBrandAsset({
+        client_id: client.id,
+        type: newAsset.type,
+        file_name: newAsset.file_name.trim(),
+        storage_url: newAsset.storage_url.trim(),
+      });
+      setAssets((prev) => [a, ...prev]);
+      setAssetDialogOpen(false);
+      setNewAsset({ file_name: "", storage_url: "", type: "other" });
+      toast.success(SUCCESS.saved);
+    } catch {
+      toast.error("Couldn't add asset. Try again?");
     }
   }
 
@@ -410,24 +456,63 @@ export function ClientProfile({ client: initial }: { client: Client }) {
           <TabsContent value="brand" className="h-full mt-0">
             <ScrollArea className="h-full">
               <div className="space-y-3 pb-4">
-                <p className="text-sm font-medium">Brand & Digital Presence</p>
-                <p className="text-xs text-muted-foreground text-pretty">
-                  Social handles, website details, and brand positioning live here. Add facts below to populate this section.
-                </p>
-                {facts.filter((f) => ["website", "instagram", "linkedin", "facebook", "twitter", "youtube", "target_audience", "tone_voice", "positioning"].includes(f.key)).length === 0 ? (
-                  <div className="rounded-xl border border-dashed py-8 text-center text-muted-foreground">
-                    <Palette className="mx-auto mb-2 size-6" />
-                    <p className="text-xs">No brand facts yet. Add some from the Intelligence tab.</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Brand & Digital Presence</p>
+                    <p className="text-xs text-muted-foreground text-pretty">Social handles, target audience, tone, and positioning.</p>
                   </div>
-                ) : (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {facts
-                      .filter((f) => ["website", "instagram", "linkedin", "facebook", "twitter", "youtube", "target_audience", "tone_voice", "positioning"].includes(f.key))
-                      .map((f) => (
+                  <Dialog open={brandDialogOpen} onOpenChange={setBrandDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 text-xs">
+                        <Plus className="mr-1 size-3" /> Add Field
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-sm">
+                      <DialogHeader><DialogTitle>Add Brand Field</DialogTitle></DialogHeader>
+                      <div className="space-y-3 py-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Field</Label>
+                          <Select value={brandField.key} onValueChange={(v) => setBrandField((p) => ({ ...p, key: v }))}>
+                            <SelectTrigger className="h-9"><SelectValue placeholder="Select field" /></SelectTrigger>
+                            <SelectContent position="popper" sideOffset={4}>
+                              {["instagram", "linkedin", "facebook", "twitter", "youtube", "website", "target_audience", "tone_voice", "positioning", "brand_color_primary", "brand_color_secondary", "tagline"].map((k) => (
+                                <SelectItem key={k} value={k}>{k.replace(/_/g, " ")}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Value</Label>
+                          <Input value={brandField.value} onChange={(e) => setBrandField((p) => ({ ...p, value: e.target.value }))} placeholder="e.g. @greenleaf_organic" />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <DialogClose asChild><Button variant="ghost" size="sm">Cancel</Button></DialogClose>
+                        <Button size="sm" onClick={handleAddBrandField} disabled={!brandField.key || !brandField.value.trim()}>Save</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                {(() => {
+                  const brandKeys = ["website", "instagram", "linkedin", "facebook", "twitter", "youtube", "target_audience", "tone_voice", "positioning", "brand_color_primary", "brand_color_secondary", "tagline"];
+                  const brandFacts = facts.filter((f) => brandKeys.includes(f.key));
+                  if (brandFacts.length === 0) {
+                    return (
+                      <div className="rounded-xl border border-dashed py-8 text-center text-muted-foreground">
+                        <Palette className="mx-auto mb-2 size-6" />
+                        <p className="text-xs">No brand details yet.</p>
+                        <p className="mt-1 text-[10px]">Click "Add Field" above to add social handles, tone, audience, and more.</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {brandFacts.map((f) => (
                         <FactCard key={f.id} fact={f} onAccept={async () => { const u = await acceptClientFact(f.id); setFacts((p) => p.map((x) => x.id === f.id ? u : x)); toast.success(SUCCESS.factAccepted); }} onReject={async () => { await rejectClientFact(f.id); setFacts((p) => p.filter((x) => x.id !== f.id)); toast.success(SUCCESS.factRejected); }} />
                       ))}
-                  </div>
-                )}
+                    </div>
+                  );
+                })()}
               </div>
             </ScrollArea>
           </TabsContent>
@@ -436,19 +521,70 @@ export function ClientProfile({ client: initial }: { client: Client }) {
           <TabsContent value="assets" className="h-full mt-0">
             <ScrollArea className="h-full">
               <div className="space-y-3 pb-4">
-                <p className="text-sm font-medium">Brand Assets ({assets.length})</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Brand Assets ({assets.length})</p>
+                  <Dialog open={assetDialogOpen} onOpenChange={setAssetDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 text-xs">
+                        <Plus className="mr-1 size-3" /> Add Asset
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-sm">
+                      <DialogHeader><DialogTitle>Add Brand Asset</DialogTitle></DialogHeader>
+                      <div className="space-y-3 py-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Type</Label>
+                          <Select value={newAsset.type} onValueChange={(v) => setNewAsset((p) => ({ ...p, type: v as BrandAsset["type"] }))}>
+                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                            <SelectContent position="popper" sideOffset={4}>
+                              {(["brand_kit", "logo", "font", "guideline", "deck", "brief", "other"] as const).map((t) => (
+                                <SelectItem key={t} value={t}>{t.replace("_", " ")}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">File Name <span className="text-destructive">*</span></Label>
+                          <Input value={newAsset.file_name} onChange={(e) => setNewAsset((p) => ({ ...p, file_name: e.target.value }))} placeholder="e.g. GreenLeaf_BrandKit_v2.pdf" autoFocus />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">URL / Link <span className="text-destructive">*</span></Label>
+                          <Input value={newAsset.storage_url} onChange={(e) => setNewAsset((p) => ({ ...p, storage_url: e.target.value }))} placeholder="https://drive.google.com/..." />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <DialogClose asChild><Button variant="ghost" size="sm">Cancel</Button></DialogClose>
+                        <Button size="sm" onClick={handleAddAsset} disabled={!newAsset.file_name.trim() || !newAsset.storage_url.trim()}>Add Asset</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
                 {assets.length === 0 ? (
                   <div className="rounded-xl border border-dashed py-8 text-center text-muted-foreground">
                     <FileText className="mx-auto mb-2 size-6" />
-                    <p className="text-xs">No assets uploaded yet.</p>
-                    <p className="mt-1 text-[10px]">Brand kits, logos, guidelines, and decks will appear here.</p>
+                    <p className="text-xs">No assets added yet.</p>
+                    <p className="mt-1 text-[10px]">Add brand kits, logos, guidelines, and decks using the button above.</p>
                   </div>
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {assets.map((a) => (
-                      <div key={a.id} className="rounded-xl border bg-card p-3">
-                        <Badge variant="outline" className="text-[10px] mb-2">{a.type.replace("_", " ")}</Badge>
-                        <p className="text-sm truncate">{a.file_name}</p>
+                      <div key={a.id} className="rounded-xl border bg-card p-3 group">
+                        <div className="flex items-center justify-between mb-1">
+                          <Badge variant="outline" className="text-[10px]">{a.type.replace("_", " ")}</Badge>
+                          <Button
+                            variant="ghost" size="icon" className="size-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                            onClick={async () => { try { await deleteBrandAsset(a.id); setAssets((prev) => prev.filter((x) => x.id !== a.id)); } catch { toast.error("Couldn't remove asset."); } }}
+                            aria-label="Delete asset"
+                          >
+                            <Trash2 className="size-3" />
+                          </Button>
+                        </div>
+                        <p className="text-sm font-medium truncate">{a.file_name}</p>
+                        {a.storage_url && (
+                          <a href={a.storage_url} target="_blank" rel="noopener noreferrer" className="mt-1 text-[10px] text-primary hover:underline truncate block">
+                            Open link
+                          </a>
+                        )}
                       </div>
                     ))}
                   </div>
