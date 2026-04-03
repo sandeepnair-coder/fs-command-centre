@@ -34,7 +34,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -174,6 +173,7 @@ export function TaskSheet({
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [extrasLoading, setExtrasLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskTags, setTaskTags] = useState<import("@/lib/types/tasks").Tag[]>([]);
 
   // Instantly show the task from card data, then lazy-load extras
@@ -227,6 +227,7 @@ export function TaskSheet({
     setDeleting(true);
     try {
       await deleteTask(detail.id);
+      setDeleteDialogOpen(false);
       onTaskDeleted(detail.id);
       onClose();
       toast.success(SUCCESS.taskDeleted);
@@ -271,22 +272,23 @@ export function TaskSheet({
                 onChanged={(title) => handleFieldChange({ title })}
               />
               <div className="flex items-center gap-1 shrink-0 mt-1">
-                <AlertDialog>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <AlertDialogTrigger asChild>
-                        <DropdownMenuItem className="text-destructive focus:text-destructive">
-                          <Trash2 className="mr-2 h-3.5 w-3.5" />
-                          Delete task
-                        </DropdownMenuItem>
-                      </AlertDialogTrigger>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onSelect={() => setTimeout(() => setDeleteDialogOpen(true), 0)}
+                    >
+                      <Trash2 className="mr-2 h-3.5 w-3.5" />
+                      Delete task
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>{DELETE.task.title}</AlertDialogTitle>
