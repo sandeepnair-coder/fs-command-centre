@@ -201,20 +201,12 @@ export function ConnectorsShell() {
                   <SelectTrigger className="h-9">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    {CONNECTOR_MODES.map((m) => {
-                      const Icon = MODE_ICONS[m.value] || Power;
-                      return (
-                        <SelectItem key={m.value} value={m.value}>
-                          <div className="flex items-center gap-2">
-                            <Icon className="size-3.5" />
-                            <div>
-                              <p className="text-sm">{m.label}</p>
-                            </div>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
+                  <SelectContent position="popper" sideOffset={4}>
+                    {CONNECTOR_MODES.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <p className="mt-1 text-[10px] text-muted-foreground">
