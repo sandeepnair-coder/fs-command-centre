@@ -1,8 +1,11 @@
 // ─── Open Claw API Client ────────────────────────────────────────────────────
-// Communicates with the Open Claw AI agent for intelligence tasks:
-// summaries, fact extraction, classification, suggestions.
+// Communicates with the Open Claw AI agent via WebSocket.
+// Protocol: ws://64.23.177.147:18789
+// Auth: Bearer token sent in the initial connection message.
 
-const OPENCLAW_API_URL = process.env.OPENCLAW_API_URL;
+import WebSocket from "ws";
+
+const OPENCLAW_API_URL = process.env.OPENCLAW_API_URL; // ws://64.23.177.147:18789
 const OPENCLAW_API_TOKEN = process.env.OPENCLAW_API_TOKEN;
 
 export class OpenClawError extends Error {
@@ -14,64 +17,130 @@ export class OpenClawError extends Error {
   }
 }
 
-async function openclawFetch<T = unknown>(
-  endpoint: string,
-  opts?: { method?: string; body?: unknown; timeout?: number }
+// ─── WebSocket request/response helper ──────────────────────────────────────
+
+function getWsUrl(): string {
+  if (!OPENCLAW_API_URL) throw new OpenClawError("OPENCLAW_API_URL not configured", 503);
+  // Ensure ws:// protocol
+  const url = OPENCLAW_API_URL.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
+  return url;
+}
+
+async function openclawRequest<T = unknown>(
+  action: string,
+  payload: Record<string, unknown>,
+  timeout = 30000
 ): Promise<T> {
   if (!OPENCLAW_API_URL || !OPENCLAW_API_TOKEN) {
     throw new OpenClawError("Open Claw is not configured. Set OPENCLAW_API_URL and OPENCLAW_API_TOKEN.", 503);
   }
 
-  const url = `${OPENCLAW_API_URL}${endpoint}`;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), opts?.timeout || 30000);
+  return new Promise<T>((resolve, reject) => {
+    const wsUrl = getWsUrl();
+    let ws: WebSocket;
+    let timeoutId: ReturnType<typeof setTimeout>;
 
-  try {
-    const res = await fetch(url, {
-      method: opts?.method || "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENCLAW_API_TOKEN}`,
-      },
-      body: opts?.body ? JSON.stringify(opts.body) : undefined,
-      signal: controller.signal,
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (err) {
+      reject(new OpenClawError(`Failed to connect to Open Claw: ${(err as Error).message}`, 503));
+      return;
+    }
+
+    timeoutId = setTimeout(() => {
+      ws.close();
+      reject(new OpenClawError("Open Claw request timed out", 408));
+    }, timeout);
+
+    ws.on("open", () => {
+      // Send authenticated request
+      ws.send(
+        JSON.stringify({
+          auth: `Bearer ${OPENCLAW_API_TOKEN}`,
+          action,
+          ...payload,
+        })
+      );
     });
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "Unknown error");
-      throw new OpenClawError(`Open Claw API error: ${res.status} ${text}`, res.status);
-    }
+    ws.on("message", (data) => {
+      clearTimeout(timeoutId);
+      try {
+        const parsed = JSON.parse(data.toString());
+        if (parsed.error) {
+          ws.close();
+          reject(new OpenClawError(parsed.error, parsed.status || 500));
+          return;
+        }
+        ws.close();
+        resolve(parsed as T);
+      } catch {
+        ws.close();
+        reject(new OpenClawError("Invalid response from Open Claw", 502));
+      }
+    });
 
-    return (await res.json()) as T;
-  } catch (err) {
-    if (err instanceof OpenClawError) throw err;
-    if ((err as Error).name === "AbortError") {
-      throw new OpenClawError("Open Claw request timed out", 408);
+    ws.on("error", (err) => {
+      clearTimeout(timeoutId);
+      reject(new OpenClawError(`Open Claw connection error: ${err.message}`, 503));
+    });
+
+    ws.on("close", (code) => {
+      clearTimeout(timeoutId);
+      if (code !== 1000 && code !== 1005) {
+        reject(new OpenClawError(`Open Claw connection closed unexpectedly (code ${code})`, 503));
+      }
+    });
+  });
+}
+
+// ─── Also support HTTP for health check (fallback) ──────────────────────────
+
+async function httpHealthCheck(): Promise<{ connected: boolean; status: string; version?: string }> {
+  if (!OPENCLAW_API_URL) return { connected: false, status: "not configured" };
+
+  const httpUrl = OPENCLAW_API_URL.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://");
+
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${httpUrl}/health`, {
+      headers: { Authorization: `Bearer ${OPENCLAW_API_TOKEN}` },
+      signal: controller.signal,
+    });
+    clearTimeout(tid);
+    if (res.ok) {
+      const data = await res.json();
+      return { connected: true, status: data.status || "ok", version: data.version };
     }
-    throw new OpenClawError(`Open Claw unreachable: ${(err as Error).message}`, 503);
-  } finally {
-    clearTimeout(timeoutId);
+    return { connected: false, status: `HTTP ${res.status}` };
+  } catch {
+    return { connected: false, status: "http health check failed" };
   }
 }
 
-// ─── Health Check ───────────────────────────────────────────────────────────
+// ─── Health Check (try WS first, then HTTP) ─────────────────────────────────
 
 export async function checkOpenClawHealth(): Promise<{
   connected: boolean;
   status: string;
   version?: string;
 }> {
+  if (!OPENCLAW_API_URL || !OPENCLAW_API_TOKEN) {
+    return { connected: false, status: "not configured" };
+  }
+
+  // Try WebSocket ping
   try {
-    const data = await openclawFetch<{ status: string; version?: string }>("/health", {
-      method: "GET",
-      timeout: 5000,
-    });
-    return { connected: true, status: data.status || "ok", version: data.version };
-  } catch (err) {
-    return {
-      connected: false,
-      status: err instanceof OpenClawError ? err.message : "unreachable",
-    };
+    const result = await openclawRequest<{ status: string; version?: string }>(
+      "ping",
+      {},
+      5000
+    );
+    return { connected: true, status: result.status || "ok", version: result.version };
+  } catch {
+    // Fallback to HTTP health
+    return httpHealthCheck();
   }
 }
 
@@ -87,9 +156,7 @@ export async function summarizeThread(messages: {
   decisions: string[];
   approvals: string[];
 }> {
-  return openclawFetch("/v1/summarize", {
-    body: { messages },
-  });
+  return openclawRequest("summarize", { messages });
 }
 
 // ─── Extract Facts ──────────────────────────────────────────────────────────
@@ -105,9 +172,7 @@ export async function extractFacts(
     source_excerpt: string;
   }[];
 }> {
-  return openclawFetch("/v1/extract-facts", {
-    body: { text, context },
-  });
+  return openclawRequest("extract-facts", { text, context });
 }
 
 // ─── Classify Message ───────────────────────────────────────────────────────
@@ -116,9 +181,7 @@ export async function classifyMessage(body: string): Promise<{
   classification: "general" | "task_candidate" | "decision" | "approval" | "blocker" | "follow_up";
   confidence: "high" | "medium" | "low";
 }> {
-  return openclawFetch("/v1/classify", {
-    body: { text: body },
-  });
+  return openclawRequest("classify", { text: body });
 }
 
 // ─── Suggest Related Cards ──────────────────────────────────────────────────
@@ -135,9 +198,7 @@ export async function suggestRelatedCards(task: {
     reason: string;
   }[];
 }> {
-  return openclawFetch("/v1/suggest-relations", {
-    body: { task, existing_tasks: existingTasks },
-  });
+  return openclawRequest("suggest-relations", { task, existing_tasks: existingTasks });
 }
 
 // ─── Client Summary ─────────────────────────────────────────────────────────
@@ -153,9 +214,7 @@ export async function generateClientSummary(clientData: {
   repeated_asks: string[];
   known_blockers: string[];
 }> {
-  return openclawFetch("/v1/client-summary", {
-    body: clientData,
-  });
+  return openclawRequest("client-summary", clientData);
 }
 
 // ─── Task Prefill ───────────────────────────────────────────────────────────
@@ -170,9 +229,7 @@ export async function prefillTask(messageContext: {
   priority?: "low" | "medium" | "high" | "urgent";
   due_date?: string;
 }> {
-  return openclawFetch("/v1/prefill-task", {
-    body: messageContext,
-  });
+  return openclawRequest("prefill-task", messageContext);
 }
 
 // ─── Enrich Client ──────────────────────────────────────────────────────────
@@ -190,7 +247,5 @@ export async function enrichClient(seed: {
     source: string;
   }[];
 }> {
-  return openclawFetch("/v1/enrich-client", {
-    body: seed,
-  });
+  return openclawRequest("enrich-client", seed);
 }
