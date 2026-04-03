@@ -27,6 +27,7 @@ import { toast } from "sonner";
 
 export function KanbanBoard({
   projectId,
+  clientId,
   columns,
   setColumns,
   subtasksMap,
@@ -35,6 +36,7 @@ export function KanbanBoard({
   clients,
 }: {
   projectId: string;
+  clientId: string | null;
   columns: ProjectColumn[];
   setColumns: React.Dispatch<React.SetStateAction<ProjectColumn[]>>;
   subtasksMap: Record<string, Subtask[]>;
@@ -262,6 +264,7 @@ export function KanbanBoard({
                   key={col.id}
                   column={col}
                   projectId={projectId}
+                  clientId={clientId}
                   setColumns={setColumns}
                   onTaskClick={setSelectedTaskId}
                   columnIndex={idx}

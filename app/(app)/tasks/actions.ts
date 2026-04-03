@@ -18,17 +18,8 @@ export async function getClients() {
   return data;
 }
 
-export async function createClientSimple(name: string) {
-  const supabase = await createClient();
-  if (!name?.trim()) throw new Error("Client name is required");
-  const { data, error } = await supabase
-    .from("clients")
-    .insert({ name: name.trim() })
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
+// createClientSimple REMOVED — client creation must go through /clients page or /api/v1/upsert-client.
+// Client is the master entity. No silent creation from task flows.
 
 // ─── Projects (Boards) ─────────────────────────────────────────────────────
 
@@ -280,7 +271,7 @@ export async function createTask(
   projectId: string,
   columnId: string,
   title: string,
-  opts?: { priority?: TaskPriority; due_date?: string | null; client_id?: string | null }
+  opts: { priority?: TaskPriority; due_date?: string | null; client_id: string }
 ) {
   const supabase = await createClient();
 
@@ -303,9 +294,9 @@ export async function createTask(
       title,
       position: nextPos,
       created_by: member?.id ?? null,
-      ...(opts?.priority ? { priority: opts.priority } : {}),
-      ...(opts?.due_date ? { due_date: opts.due_date } : {}),
-      ...(opts?.client_id ? { client_id: opts.client_id } : {}),
+      client_id: opts.client_id,
+      ...(opts.priority ? { priority: opts.priority } : {}),
+      ...(opts.due_date ? { due_date: opts.due_date } : {}),
     })
     .select("*")
     .single();

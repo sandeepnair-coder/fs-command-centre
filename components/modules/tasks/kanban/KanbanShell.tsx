@@ -50,7 +50,6 @@ import {
   getProfiles,
   createColumn,
   createTask,
-  createClientSimple,
   addAssignee,
   deleteProject,
   renameProject,
@@ -117,8 +116,6 @@ export function KanbanShell({
   const [newTaskAssigneeId, setNewTaskAssigneeId] = useState<string>("__none__");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [newTaskClientId, setNewTaskClientId] = useState<string>("__none__");
-  const [newClientName, setNewClientName] = useState("");
-  const [showNewClientInput, setShowNewClientInput] = useState(false);
   const [newTaskCreating, setNewTaskCreating] = useState(false);
 
   // ─── New feature state ──────────────────────────────────────────────────
@@ -223,8 +220,6 @@ export function KanbanShell({
     setNewTaskAssigneeId("__none__");
     setNewTaskDueDate("");
     setNewTaskClientId("__none__");
-    setNewClientName("");
-    setShowNewClientInput(false);
     setAddTaskOpen(true);
   }
 
@@ -307,14 +302,19 @@ export function KanbanShell({
     toast.success(SUCCESS.taskCreated);
 
     try {
-      // Handle inline client creation
-      let resolvedClientId: string | null = null;
-      if (showNewClientInput && newClientName.trim()) {
-        const newClient = await createClientSimple(newClientName.trim());
-        resolvedClientId = newClient.id;
-        setClients((prev) => [...prev, newClient]);
-      } else if (newTaskClientId !== "__none__") {
-        resolvedClientId = newTaskClientId;
+      const resolvedClientId = newTaskClientId !== "__none__" ? newTaskClientId : null;
+      if (!resolvedClientId) {
+        toast.error("Client is required. Select a client or create one in the Clients section first.");
+        setNewTaskCreating(false);
+        // Remove optimistic card
+        setColumns((prev) =>
+          prev.map((c) =>
+            c.id === newTaskColumnId
+              ? { ...c, tasks: (c.tasks || []).filter((t) => t.id !== tempId) }
+              : c
+          )
+        );
+        return;
       }
 
       const task = await createTask(selectedProjectId, newTaskColumnId, trimmed, {
@@ -602,56 +602,29 @@ export function KanbanShell({
                         </Select>
                       </div>
 
-                      {/* Client */}
+                      {/* Client (required) */}
                       <div className="space-y-1.5">
-                        <Label className="text-sm">Client</Label>
-                        {showNewClientInput ? (
-                          <div className="flex gap-1">
-                            <Input
-                              value={newClientName}
-                              onChange={(e) => setNewClientName(e.target.value)}
-                              placeholder="Client name"
-                              className="h-9"
-                              autoFocus
-                            />
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-9 px-2 shrink-0"
-                              onClick={() => {
-                                setShowNewClientInput(false);
-                                setNewClientName("");
-                                setNewTaskClientId("__none__");
-                              }}
-                            >
-                              ✕
-                            </Button>
-                          </div>
+                        <Label className="text-sm">Client <span className="text-destructive">*</span></Label>
+                        {clients.length === 0 ? (
+                          <p className="text-xs text-muted-foreground py-2">
+                            No clients yet.{" "}
+                            <a href="/clients" className="text-primary underline">Create a client first</a>
+                          </p>
                         ) : (
                           <Select
                             value={newTaskClientId}
-                            onValueChange={(v) => {
-                              if (v === "__new__") {
-                                setShowNewClientInput(true);
-                                setNewTaskClientId("__none__");
-                              } else {
-                                setNewTaskClientId(v);
-                              }
-                            }}
+                            onValueChange={setNewTaskClientId}
                           >
                             <SelectTrigger className="h-9">
-                              <SelectValue placeholder="No client" />
+                              <SelectValue placeholder="Select client" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="__none__">No Client</SelectItem>
+                              <SelectItem value="__none__" disabled>Select client</SelectItem>
                               {clients.map((c) => (
                                 <SelectItem key={c.id} value={c.id}>
                                   {c.name}
                                 </SelectItem>
                               ))}
-                              <SelectItem value="__new__">
-                                + Create new client
-                              </SelectItem>
                             </SelectContent>
                           </Select>
                         )}
@@ -699,7 +672,7 @@ export function KanbanShell({
                     <Button
                       size="sm"
                       onClick={handleAddTask}
-                      disabled={newTaskCreating || !newTaskTitle.trim()}
+                      disabled={newTaskCreating || !newTaskTitle.trim() || newTaskClientId === "__none__"}
                     >
                       {newTaskCreating ? "Creating..." : "Create Task"}
                     </Button>
@@ -798,6 +771,7 @@ export function KanbanShell({
           {viewMode === "kanban" && (
             <KanbanBoard
               projectId={selectedProjectId}
+              clientId={selectedBoard?.client_id || null}
               columns={filteredColumns}
               setColumns={setColumns}
               subtasksMap={subtasksMap}

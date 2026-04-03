@@ -73,15 +73,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No columns found on this board." }, { status: 404 });
     }
 
-    // Resolve client by name
-    let clientId: string | null = null;
-    if (client_name) {
-      const { data: clients } = await supabase
-        .from("clients")
-        .select("id")
-        .ilike("name", `%${client_name}%`)
-        .limit(1);
-      clientId = clients?.[0]?.id || null;
+    // STRICT: Resolve client — required
+    if (!client_name) {
+      return NextResponse.json({ error: "client_name is required. Use /api/v1/upsert-client to create a client first." }, { status: 400 });
+    }
+    const { data: clientMatches } = await supabase
+      .from("clients")
+      .select("id")
+      .ilike("name", `%${client_name}%`)
+      .limit(1);
+    const clientId = clientMatches?.[0]?.id || null;
+    if (!clientId) {
+      return NextResponse.json({ error: `Client "${client_name}" not found. Create the client first.` }, { status: 404 });
     }
 
     // Get max position

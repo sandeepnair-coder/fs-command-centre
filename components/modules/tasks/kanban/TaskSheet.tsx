@@ -79,7 +79,6 @@ import {
   getTaskDetail,
   updateTask,
   deleteTask,
-  createClientSimple,
   addAssignee,
   removeAssignee,
   addComment,
@@ -706,42 +705,33 @@ function ClientField({
   clients: Client[];
   onChanged: (updates: Partial<Task>) => void;
 }) {
-  const currentName = task.client_id
-    ? clients.find((c) => c.id === task.client_id)?.name ?? task.client_name ?? ""
-    : task.client_name ?? "";
-
-  const [value, setValue] = useState(currentName);
-  useEffect(() => { setValue(currentName); }, [currentName]);
-
-  async function handleSave() {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      onChanged({ client_id: null, client_name: null });
-      try { await updateTask(task.id, { client_id: null }); } catch {}
-      return;
-    }
-    const existing = clients.find((c) => c.name.toLowerCase() === trimmed.toLowerCase());
-    if (existing) {
-      onChanged({ client_id: existing.id, client_name: existing.name });
-      try { await updateTask(task.id, { client_id: existing.id }); } catch {}
-    } else {
-      try {
-        const nc = await createClientSimple(trimmed);
-        onChanged({ client_id: nc.id, client_name: nc.name });
-        await updateTask(task.id, { client_id: nc.id });
-      } catch { toast.error("Client didn't save — try again."); }
-    }
-  }
+  const currentClientId = task.client_id || "";
 
   return (
-    <Input
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={handleSave}
-      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-      placeholder="Which brand or client?"
-      className="h-8 text-sm bg-muted/50 border-border/50"
-    />
+    <Select
+      value={currentClientId}
+      onValueChange={async (v) => {
+        const client = clients.find((c) => c.id === v);
+        if (client) {
+          onChanged({ client_id: client.id, client_name: client.name });
+          try { await updateTask(task.id, { client_id: client.id }); } catch { toast.error("Client didn't save — try again."); }
+        }
+      }}
+    >
+      <SelectTrigger className="h-8 text-sm bg-muted/50 border-border/50">
+        <SelectValue placeholder="Select client" />
+      </SelectTrigger>
+      <SelectContent position="popper" sideOffset={4}>
+        {clients.map((c) => (
+          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+        ))}
+        {clients.length === 0 && (
+          <div className="px-2 py-1.5 text-xs text-muted-foreground">
+            No clients yet. <a href="/clients" className="text-primary underline">Create one</a>
+          </div>
+        )}
+      </SelectContent>
+    </Select>
   );
 }
 

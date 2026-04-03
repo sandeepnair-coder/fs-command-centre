@@ -1,7 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import type { CreateProjectInput, SearchProjectsInput, UpdateProjectInput, GetBoardContextInput } from "@/lib/api/schemas";
 
-// ─── Create project with client resolution + tasks ──────────────────────────
+// ─── Validate client exists (strict enforcement) ────────────────────────────
+
+async function validateClientExists(clientId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("clients").select("id, name").eq("id", clientId).single();
+  if (error || !data) {
+    throw new Error(`Client not found (id: ${clientId}). Create the client first using upsert-client, then retry.`);
+  }
+  return data;
+}
+
+// ─── Create project — client_id REQUIRED ────────────────────────────────────
 
 export async function createProjectFromAgent(input: CreateProjectInput) {
   const supabase = await createClient();
@@ -26,28 +37,12 @@ export async function createProjectFromAgent(input: CreateProjectInput) {
       .eq("source_message_id", input.source_message_id)
       .single();
     if (existing) {
-      return { deduplicated: true, project: existing, message: `Project already exists for this message` };
+      return { deduplicated: true, project: existing, message: "Project already exists for this message" };
     }
   }
 
-  // Resolve or create client
-  let clientId: string | null = null;
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("id, name")
-    .ilike("name", `%${input.client_name}%`)
-    .limit(1);
-
-  if (clients?.[0]) {
-    clientId = clients[0].id;
-  } else {
-    const { data: newClient } = await supabase
-      .from("clients")
-      .insert({ name: input.client_name })
-      .select("id")
-      .single();
-    clientId = newClient?.id || null;
-  }
+  // STRICT: Validate client exists — no auto-creation
+  const client = await validateClientExists(input.client_id);
 
   // Create project
   const { data: project, error: projectError } = await supabase
@@ -55,10 +50,10 @@ export async function createProjectFromAgent(input: CreateProjectInput) {
     .insert({
       name: input.name,
       description: input.description || null,
-      client_id: clientId,
+      client_id: input.client_id,
       status: "active",
       due_date: input.due_date || null,
-      brand_name: input.brand_name || input.client_name,
+      brand_name: input.brand_name || client.name,
       conversation_summary: input.conversation_summary || null,
       source_channel: input.source_channel || "api",
       source_message_id: input.source_message_id || null,
@@ -76,9 +71,7 @@ export async function createProjectFromAgent(input: CreateProjectInput) {
     "Client Review", "Revisions", "Approved / Done",
   ];
   const columnInserts = defaultColumns.map((name, i) => ({
-    project_id: project.id,
-    name,
-    position: i * 1000,
+    project_id: project.id, name, position: i * 1000,
   }));
   const { data: columns } = await supabase
     .from("project_columns")
@@ -103,11 +96,12 @@ export async function createProjectFromAgent(input: CreateProjectInput) {
         .insert({
           project_id: project.id,
           column_id: colId,
-          client_id: clientId,
+          client_id: input.client_id, // Always from the project's client
           title: t.title,
           description: t.description || null,
           priority: t.priority || "low",
           due_date: t.due_date || null,
+          cost: t.cost || null,
           position: i * 1000,
           created_by_agent: true,
           agent_run_id: input.agent_run_id || null,
@@ -117,42 +111,26 @@ export async function createProjectFromAgent(input: CreateProjectInput) {
         .single();
 
       if (task) {
-        const colName = columns.find((c) => c.id === task.column_id)?.name || "Unknown";
-        createdTasks.push({ id: task.id, title: task.title, column: colName });
+        createdTasks.push({ id: task.id, title: task.title, column: columns.find((c) => c.id === task.column_id)?.name || "Unknown" });
       }
     }
   }
 
   const result = {
     project: { id: project.id, name: project.name, status: project.status, created_at: project.created_at },
-    client: { id: clientId, name: input.client_name },
+    client: { id: input.client_id, name: client.name },
     columns: (columns || []).map((c) => ({ id: c.id, name: c.name })),
     tasks: createdTasks,
     message: `Project "${project.name}" created with ${createdTasks.length} tasks`,
   };
 
-  // Store idempotency key
   if (input.idempotency_key) {
-    await supabase.from("idempotency_keys").insert({
-      key: input.idempotency_key,
-      entity_type: "project",
-      entity_id: project.id,
-      response_json: result,
-    });
+    await supabase.from("idempotency_keys").insert({ key: input.idempotency_key, entity_type: "project", entity_id: project.id, response_json: result });
   }
 
-  // Audit
   await supabase.from("audit_log_events").insert({
-    actor_type: "connector",
-    event_type: "project_created_by_agent",
-    entity_type: "project",
-    entity_id: project.id,
-    metadata_json: JSON.stringify({
-      agent_run_id: input.agent_run_id,
-      source_channel: input.source_channel,
-      task_count: createdTasks.length,
-      client_name: input.client_name,
-    }),
+    actor_type: "connector", event_type: "project_created_by_agent", entity_type: "project", entity_id: project.id,
+    metadata_json: JSON.stringify({ agent_run_id: input.agent_run_id, client_id: input.client_id, task_count: createdTasks.length }),
   });
 
   return result;
@@ -164,7 +142,7 @@ export async function searchProjects(input: SearchProjectsInput) {
   const supabase = await createClient();
   let query = supabase
     .from("projects")
-    .select("id, name, status, description, brand_name, due_date, created_at, clients(id, name)")
+    .select("id, name, status, description, brand_name, due_date, created_at, client_id, clients(id, name)")
     .order("created_at", { ascending: false })
     .limit(input.limit);
 
@@ -175,7 +153,7 @@ export async function searchProjects(input: SearchProjectsInput) {
     if (clients?.length) {
       query = query.in("client_id", clients.map((c) => c.id));
     } else {
-      return { projects: [], message: "No matching clients found" };
+      return { projects: [] };
     }
   }
 
@@ -184,12 +162,8 @@ export async function searchProjects(input: SearchProjectsInput) {
 
   return {
     projects: (data || []).map((p) => ({
-      id: p.id,
-      name: p.name,
-      status: p.status,
-      description: p.description,
-      brand_name: p.brand_name,
-      due_date: p.due_date,
+      id: p.id, name: p.name, status: p.status, description: p.description,
+      brand_name: p.brand_name, due_date: p.due_date, client_id: p.client_id,
       client: (p.clients as unknown as { id: string; name: string })?.name || null,
       created_at: p.created_at,
     })),
@@ -218,10 +192,7 @@ export async function updateProject(input: UpdateProjectInput) {
   if (error) throw error;
 
   await supabase.from("audit_log_events").insert({
-    actor_type: "connector",
-    event_type: "project_updated_by_agent",
-    entity_type: "project",
-    entity_id: projectId,
+    actor_type: "connector", event_type: "project_updated_by_agent", entity_type: "project", entity_id: projectId,
     metadata_json: JSON.stringify({ agent_run_id: input.agent_run_id, updates: input.updates }),
   });
 
@@ -242,7 +213,7 @@ export async function getBoardContext(input: GetBoardContextInput) {
 
   const { data: project } = await supabase
     .from("projects")
-    .select("id, name, status, description, brand_name, due_date, clients(id, name)")
+    .select("id, name, status, description, brand_name, due_date, client_id, clients(id, name)")
     .eq("id", projectId)
     .single();
 
@@ -250,28 +221,12 @@ export async function getBoardContext(input: GetBoardContextInput) {
   let tasks: { id: string; title: string; priority: string; column: string; due_date: string | null }[] = [];
 
   if (input.include_columns || input.include_tasks) {
-    const { data: cols } = await supabase
-      .from("project_columns")
-      .select("id, name, position")
-      .eq("project_id", projectId)
-      .order("position");
+    const { data: cols } = await supabase.from("project_columns").select("id, name, position").eq("project_id", projectId).order("position");
 
     if (input.include_tasks && cols) {
-      const { data: taskData } = await supabase
-        .from("tasks")
-        .select("id, title, priority, column_id, due_date")
-        .eq("project_id", projectId)
-        .order("position");
-
+      const { data: taskData } = await supabase.from("tasks").select("id, title, priority, column_id, due_date").eq("project_id", projectId).order("position");
       const colMap = new Map(cols.map((c) => [c.id, c.name]));
-      tasks = (taskData || []).map((t) => ({
-        id: t.id,
-        title: t.title,
-        priority: t.priority,
-        column: colMap.get(t.column_id) || "Unknown",
-        due_date: t.due_date,
-      }));
-
+      tasks = (taskData || []).map((t) => ({ id: t.id, title: t.title, priority: t.priority, column: colMap.get(t.column_id) || "Unknown", due_date: t.due_date }));
       const countMap: Record<string, number> = {};
       tasks.forEach((t) => { countMap[t.column] = (countMap[t.column] || 0) + 1; });
       columns = (cols || []).map((c) => ({ id: c.id, name: c.name, task_count: countMap[c.name] || 0 }));
@@ -282,15 +237,10 @@ export async function getBoardContext(input: GetBoardContextInput) {
 
   return {
     project: {
-      id: project?.id,
-      name: project?.name,
-      status: project?.status,
-      description: project?.description,
-      brand_name: project?.brand_name,
+      id: project?.id, name: project?.name, status: project?.status, description: project?.description,
+      brand_name: project?.brand_name, client_id: project?.client_id,
       client: (project?.clients as unknown as { name: string })?.name || null,
     },
-    columns,
-    tasks,
-    summary: { total_tasks: tasks.length, columns: columns.length },
+    columns, tasks, summary: { total_tasks: tasks.length, columns: columns.length },
   };
 }

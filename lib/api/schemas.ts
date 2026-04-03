@@ -24,7 +24,7 @@ const taskOrMsg = {
 export const CreateProjectSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
-  client_name: z.string().min(1).max(200),
+  client_id: z.string().uuid({ message: "Valid client_id (UUID) is required. Use search-clients or upsert-client first." }),
   brand_name: z.string().max(200).optional(),
   due_date: dateStr,
   conversation_summary: z.string().max(5000).optional(),
@@ -79,13 +79,13 @@ export type GetBoardContextInput = z.infer<typeof GetBoardContextSchema>;
 export const CreateTasksSchema = z.object({
   project_id: z.string().uuid().optional(),
   project_name: z.string().max(200).optional(),
+  client_id: z.string().uuid({ message: "Valid client_id required. Use search-clients first." }).optional(),
   tasks: z.array(z.object({
     title: z.string().min(1).max(500),
     description: z.string().max(2000).optional(),
     priority: priority,
     due_date: dateStr,
     column: z.string().max(100).optional(),
-    client_name: z.string().max(200).optional(),
     assignee_name: z.string().max(200).optional(),
     tags: z.array(z.string().max(50)).optional(),
     cost: z.number().min(0).optional(),
@@ -104,7 +104,7 @@ export const UpdateTaskSchema = z.object({
     due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
     cost: z.number().min(0).nullable().optional(),
     column: z.string().max(100).optional(),
-    client_name: z.string().max(200).nullable().optional(),
+    client_id: z.string().uuid().nullable().optional(),
     is_completed: z.boolean().optional(),
   }),
   agent_run_id: z.string().max(200).optional(),
@@ -185,8 +185,7 @@ export const UpsertClientSchema = z.object({
 export type UpsertClientInput = z.infer<typeof UpsertClientSchema>;
 
 export const UpdateClientSchema = z.object({
-  client_id: z.string().uuid().optional(),
-  client_name: z.string().max(200).optional(),
+  client_id: z.string().uuid({ message: "client_id required" }),
   updates: z.object({
     name: z.string().max(200).optional(),
     company_name: z.string().max(200).nullable().optional(),
@@ -198,12 +197,11 @@ export const UpdateClientSchema = z.object({
     notes: z.string().max(5000).nullable().optional(),
   }),
   agent_run_id: z.string().max(200).optional(),
-}).refine(d => d.client_id || d.client_name, { message: "Either client_id or client_name required" });
+});
 export type UpdateClientInput = z.infer<typeof UpdateClientSchema>;
 
 export const AddClientContactSchema = z.object({
-  client_id: z.string().uuid().optional(),
-  client_name: z.string().max(200).optional(),
+  client_id: z.string().uuid({ message: "client_id required. Use search-clients first." }),
   name: z.string().min(1).max(200),
   role: z.string().max(100).optional(),
   email: z.string().email().max(300).optional(),
@@ -211,19 +209,18 @@ export const AddClientContactSchema = z.object({
   preferred_channel: z.enum(["email", "slack", "whatsapp"]).optional(),
   notes: z.string().max(2000).optional(),
   agent_run_id: z.string().max(200).optional(),
-}).refine(d => d.client_id || d.client_name, { message: "Either client_id or client_name required" });
+});
 export type AddClientContactInput = z.infer<typeof AddClientContactSchema>;
 
 export const AddClientFactSchema = z.object({
-  client_id: z.string().uuid().optional(),
-  client_name: z.string().max(200).optional(),
+  client_id: z.string().uuid({ message: "client_id required. Use search-clients first." }),
   facts: z.array(z.object({
     key: z.string().min(1).max(100),
     value: z.string().min(1).max(2000),
     confidence: z.enum(["high", "medium", "low"]).default("medium"),
   })).min(1).max(30),
   agent_run_id: z.string().max(200).optional(),
-}).refine(d => d.client_id || d.client_name, { message: "Either client_id or client_name required" });
+});
 export type AddClientFactInput = z.infer<typeof AddClientFactSchema>;
 
 export const SearchClientsSchema = z.object({
@@ -233,12 +230,11 @@ export const SearchClientsSchema = z.object({
 export type SearchClientsInput = z.infer<typeof SearchClientsSchema>;
 
 export const GetClientProfileSchema = z.object({
-  client_id: z.string().uuid().optional(),
-  client_name: z.string().max(200).optional(),
+  client_id: z.string().uuid({ message: "client_id required" }),
   include_contacts: z.boolean().default(true),
   include_facts: z.boolean().default(true),
   include_projects: z.boolean().default(true),
-}).refine(d => d.client_id || d.client_name, { message: "Either client_id or client_name required" });
+});
 export type GetClientProfileInput = z.infer<typeof GetClientProfileSchema>;
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -246,7 +242,7 @@ export type GetClientProfileInput = z.infer<typeof GetClientProfileSchema>;
 // ═════════════════════════════════════════════════════════════════════════════
 
 export const CreateWorkStreamSchema = z.object({
-  client_name: z.string().min(1).max(200),
+  client_id: z.string().uuid({ message: "client_id required" }),
   name: z.string().min(1).max(200),
   project_name: z.string().max(200).optional(),
   summary: z.string().max(2000).optional(),

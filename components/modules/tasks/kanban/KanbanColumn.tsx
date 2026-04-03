@@ -52,6 +52,7 @@ import { toast } from "sonner";
 export function KanbanColumn({
   column,
   projectId,
+  clientId,
   setColumns,
   onTaskClick,
   columnIndex,
@@ -62,6 +63,7 @@ export function KanbanColumn({
 }: {
   column: ProjectColumn;
   projectId: string;
+  clientId: string | null;
   setColumns: React.Dispatch<React.SetStateAction<ProjectColumn[]>>;
   onTaskClick: (taskId: string) => void;
   columnIndex: number;
@@ -162,7 +164,12 @@ export function KanbanColumn({
     );
 
     try {
-      const task = await createTask(projectId, column.id, trimmed);
+      if (!clientId) {
+        toast.error("No client linked to this board. Select a client for the project first.");
+        setColumns((prev) => prev.map((c) => c.id === column.id ? { ...c, tasks: (c.tasks || []).filter((t) => t.id !== tempId) } : c));
+        return;
+      }
+      const task = await createTask(projectId, column.id, trimmed, { client_id: clientId });
       // Replace temp card with real one
       setColumns((prev) =>
         prev.map((c) =>

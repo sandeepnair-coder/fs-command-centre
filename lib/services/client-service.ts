@@ -1,14 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import type { UpsertClientInput, UpdateClientInput, AddClientContactInput, AddClientFactInput, SearchClientsInput, GetClientProfileInput, CreateWorkStreamInput, ManageColumnsInput, ListMembersInput } from "@/lib/api/schemas";
 
-async function resolveClientId(opts: { client_id?: string; client_name?: string }) {
+async function validateClientId(clientId: string) {
   const supabase = await createClient();
-  if (opts.client_id) return opts.client_id;
-  if (opts.client_name) {
-    const { data } = await supabase.from("clients").select("id").ilike("name", `%${opts.client_name}%`).limit(1);
-    if (data?.[0]) return data[0].id;
-  }
-  throw new Error("Client not found");
+  const { data } = await supabase.from("clients").select("id").eq("id", clientId).single();
+  if (!data) throw new Error(`Client not found (id: ${clientId}). Create the client first using upsert-client.`);
+  return data.id;
 }
 
 async function audit(event: string, entityType: string, entityId: string, agentRunId?: string, meta?: Record<string, unknown>) {
@@ -67,7 +64,7 @@ export async function upsertClient(input: UpsertClientInput) {
 
 export async function updateClientByAgent(input: UpdateClientInput) {
   const supabase = await createClient();
-  const clientId = await resolveClientId(input);
+  const clientId = await validateClientId(input.client_id);
   const { data, error } = await supabase.from("clients").update({ ...input.updates, updated_at: new Date().toISOString() }).eq("id", clientId).select("id, name, company_name, primary_email, website, phone, timezone, industry").single();
   if (error) throw error;
   await audit("client_updated_by_agent", "client", clientId, input.agent_run_id, { updates: input.updates });
@@ -78,7 +75,7 @@ export async function updateClientByAgent(input: UpdateClientInput) {
 
 export async function addClientContactByAgent(input: AddClientContactInput) {
   const supabase = await createClient();
-  const clientId = await resolveClientId(input);
+  const clientId = await validateClientId(input.client_id);
   const { data, error } = await supabase.from("client_contacts").insert({
     client_id: clientId, name: input.name, role: input.role || null, email: input.email || null,
     phone: input.phone || null, preferred_channel: input.preferred_channel || null, notes: input.notes || null,
@@ -93,7 +90,7 @@ export async function addClientContactByAgent(input: AddClientContactInput) {
 
 export async function addClientFactsByAgent(input: AddClientFactInput) {
   const supabase = await createClient();
-  const clientId = await resolveClientId(input);
+  const clientId = await validateClientId(input.client_id);
   const saved: { key: string; value: string }[] = [];
 
   for (const f of input.facts) {
@@ -124,7 +121,7 @@ export async function searchClients(input: SearchClientsInput) {
 
 export async function getClientProfile(input: GetClientProfileInput) {
   const supabase = await createClient();
-  const clientId = await resolveClientId(input);
+  const clientId = await validateClientId(input.client_id);
 
   const { data: client } = await supabase.from("clients").select("*").eq("id", clientId).single();
   let contacts: unknown[] = [];
@@ -151,7 +148,7 @@ export async function getClientProfile(input: GetClientProfileInput) {
 
 export async function createWorkStreamByAgent(input: CreateWorkStreamInput) {
   const supabase = await createClient();
-  const clientId = await resolveClientId({ client_name: input.client_name });
+  const clientId = await validateClientId(input.client_id);
   let projectId: string | null = null;
   if (input.project_name) {
     const { data } = await supabase.from("projects").select("id").ilike("name", `%${input.project_name}%`).limit(1);

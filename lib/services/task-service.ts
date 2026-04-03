@@ -30,10 +30,18 @@ async function resolveMemberId(name: string) {
   return data?.[0]?.id || null;
 }
 
-async function resolveClientId(name: string) {
+async function validateClientId(clientId: string) {
   const supabase = await createClient();
-  const { data } = await supabase.from("clients").select("id").ilike("name", `%${name}%`).limit(1);
-  return data?.[0]?.id || null;
+  const { data } = await supabase.from("clients").select("id").eq("id", clientId).single();
+  if (!data) throw new Error(`Client not found (id: ${clientId}). Create the client first using upsert-client.`);
+  return data.id;
+}
+
+async function getProjectClientId(projectId: string): Promise<string> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("projects").select("client_id").eq("id", projectId).single();
+  if (!data?.client_id) throw new Error("Project has no client — data integrity error");
+  return data.client_id;
 }
 
 async function audit(event: string, entityType: string, entityId: string, agentRunId?: string, meta?: Record<string, unknown>) {
@@ -64,6 +72,11 @@ export async function createTasksForProject(input: CreateTasksInput) {
   const { data: columns } = await supabase.from("project_columns").select("id, name").eq("project_id", projectId).order("position");
   if (!columns?.length) throw new Error("No columns on this board.");
 
+  // STRICT: Get client_id from the project — tasks inherit client from project
+  const projectClientId = input.client_id
+    ? await validateClientId(input.client_id)
+    : await getProjectClientId(projectId);
+
   const colMap: Record<string, string> = {};
   columns.forEach((c) => { colMap[c.name.toLowerCase()] = c.id; });
 
@@ -78,11 +91,10 @@ export async function createTasksForProject(input: CreateTasksInput) {
     }
 
     const colId = t.column ? (Object.entries(colMap).find(([n]) => n.includes(t.column!.toLowerCase()))?.[1] || columns[0].id) : columns[0].id;
-    const clientId = t.client_name ? await resolveClientId(t.client_name) : null;
     const { data: lastTask } = await supabase.from("tasks").select("position").eq("column_id", colId).order("position", { ascending: false }).limit(1);
 
     const { data: task, error } = await supabase.from("tasks").insert({
-      project_id: projectId, column_id: colId, client_id: clientId, title: t.title,
+      project_id: projectId, column_id: colId, client_id: projectClientId, title: t.title,
       description: t.description || null, priority: t.priority || "low", due_date: t.due_date || null,
       cost: t.cost || null, position: (lastTask?.[0]?.position || 0) + 1000 + i,
       created_by_agent: true, agent_run_id: input.agent_run_id || null, source_channel: input.source_channel || "api",
@@ -136,8 +148,12 @@ export async function updateTaskByAgent(input: UpdateTaskInput) {
     const colId = await resolveColumnId(task.project_id, input.updates.column);
     if (colId) updates.column_id = colId;
   }
-  if (input.updates.client_name !== undefined) {
-    updates.client_id = input.updates.client_name ? await resolveClientId(input.updates.client_name) : null;
+  if (input.updates.client_id !== undefined) {
+    if (input.updates.client_id) {
+      await validateClientId(input.updates.client_id);
+      updates.client_id = input.updates.client_id;
+    }
+    // client_id cannot be set to null — client is required
   }
 
   const { data: updated, error } = await supabase.from("tasks").update(updates).eq("id", taskId).select("id, title, priority, due_date, cost, column_id, is_completed").single();
