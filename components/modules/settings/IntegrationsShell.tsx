@@ -126,16 +126,18 @@ const SETUP_INSTRUCTIONS: Record<ChannelProvider, {
   whatsapp: {
     fields: [
       { key: "business_number", label: "WhatsApp Business Number", placeholder: "+919876543210" },
+      { key: "verify_token", label: "Webhook Verify Token", placeholder: "your-custom-verify-token" },
+      { key: "access_token", label: "Permanent Access Token (optional)", placeholder: "EAAx...", secret: true },
     ],
     steps: [
-      "Enter the WhatsApp Business number you want to track",
-      "Configure your WhatsApp provider to forward messages to:",
-      "{origin}/api/channels/webhooks/whatsapp",
-      "Set Authorization header: Bearer <your API token>",
-      "All inbound and outbound messages will appear in Comms",
+      "Go to Meta Developer Portal > Your App > WhatsApp > Configuration",
+      'Set Webhook URL to: {origin}/api/channels/webhooks/whatsapp',
+      "Enter the Verify Token you choose below (any string you pick)",
+      "Subscribe to: messages, message_template_status_update",
+      "Enter your WhatsApp Business number and save",
     ],
-    consoleUrl: "",
-    consoleName: "",
+    consoleUrl: "https://developers.facebook.com/apps/",
+    consoleName: "Meta Developer Portal",
   },
 };
 
