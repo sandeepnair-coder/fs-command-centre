@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { getCurrentMember } from "@/lib/auth/getCurrentMember";
-import { Settings, User, Palette, Shield, Plug2 } from "lucide-react";
+import { Settings, User, Palette, Shield, Plug2, Cable } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -54,6 +54,20 @@ async function SettingsContent() {
           </CardHeader>
         </Card>
 
+        <Link href="/settings/integrations" className="group">
+          <Card className="transition-colors group-hover:border-primary/50">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Cable className="h-5 w-5 text-muted-foreground" />
+                <CardTitle className="text-base">Integrations</CardTitle>
+              </div>
+              <CardDescription>
+                Connect Gmail, Slack, and WhatsApp channels.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
         <Link href="/settings/connectors" className="group">
           <Card className="transition-colors group-hover:border-primary/50">
             <CardHeader>
@@ -62,7 +76,7 @@ async function SettingsContent() {
                 <CardTitle className="text-base">Connectors</CardTitle>
               </div>
               <CardDescription>
-                Manage Open Claw and integration access.
+                Manage Open Claw and agent access.
               </CardDescription>
             </CardHeader>
           </Card>

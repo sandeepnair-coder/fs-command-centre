@@ -75,6 +75,7 @@ import {
 import {
   createClientContact,
   upsertClientFact,
+  createClientFull,
 } from "@/app/(app)/clients/actions";
 import type {
   Conversation,
@@ -236,8 +237,17 @@ export function CommsShell() {
     if (type === "create_task" || type === "create_project") {
       getProjects().then(setProjectsList).catch(() => {});
     }
-    if (type === "create_task" || type === "create_project" || type === "link_client") {
+    if (type === "create_task" || type === "create_project" || type === "link_client" || type === "create_client") {
       getClients().then(setClientsList).catch(() => {});
+    }
+    // Pre-fill new client fields from conversation participants
+    if (type === "create_client" && selected) {
+      const firstParticipant = selected.participants?.[0] || "";
+      if (firstParticipant.includes("@")) {
+        setForm((prev) => ({ ...prev, newClientEmail: firstParticipant }));
+      } else if (firstParticipant.startsWith("+")) {
+        setForm((prev) => ({ ...prev, newClientPhone: firstParticipant }));
+      }
     }
   }, []);
 
@@ -390,6 +400,26 @@ export function CommsShell() {
     finally { setDialogLoading(false); }
   }, [form, selected, clientsList, closeDialog]);
 
+  const handleCreateClient = useCallback(async () => {
+    if (!form.newClientName?.trim()) return;
+    setDialogLoading(true);
+    try {
+      const client = await createClientFull({
+        name: form.newClientName.trim(),
+        primary_email: form.newClientEmail?.trim() || undefined,
+        phone: form.newClientPhone?.trim() || undefined,
+      });
+      // Auto-link the conversation
+      if (selected && !selected.id.startsWith("demo-")) {
+        await linkConversationToClient(selected.id, client.id);
+      }
+      setConversations((prev) => prev.map((c) => c.id === selected?.id ? { ...c, client_id: client.id, client_name: client.name } : c));
+      toast.success(`Client "${client.name}" created and linked`);
+      closeDialog();
+    } catch (e) { toast.error("Failed to create client"); }
+    finally { setDialogLoading(false); }
+  }, [form, selected, closeDialog]);
+
   const handleClassifyApproval = useCallback(async (msg: CommsMessage) => {
     if (msg.id.startsWith("m")) {
       toast.success("Message marked as Approval");
@@ -403,8 +433,18 @@ export function CommsShell() {
     } catch (e) { toast.error("Failed to classify message"); }
   }, []);
 
+  const [hasRealData, setHasRealData] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "error">("idle");
+
   useEffect(() => {
-    getConversations().then((data) => { if (data.length > 0) setConversations(data); }).catch(() => {});
+    getConversations()
+      .then((data) => {
+        if (data.length > 0) {
+          setConversations(data);
+          setHasRealData(true);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const filtered = conversations.filter((c) => {
@@ -478,8 +518,14 @@ export function CommsShell() {
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
               <Inbox className="mb-2 size-8" />
-              <p className="text-sm font-medium">No conversations</p>
-              <p className="mt-1 text-xs text-pretty">Threads will appear once channels are connected.</p>
+              <p className="text-sm font-medium">
+                {activeTab !== "all" || quickFilter !== "all" ? "No matching conversations" : "No conversations yet"}
+              </p>
+              <p className="mt-1 text-xs text-pretty">
+                {activeTab !== "all" || quickFilter !== "all"
+                  ? "Try adjusting your filters."
+                  : "Connect Gmail, Slack, or WhatsApp in Settings > Integrations."}
+              </p>
             </div>
           ) : (
             <div className="divide-y">
@@ -658,8 +704,11 @@ export function CommsShell() {
                   <div className="text-center py-2">
                     <AlertTriangle className="mx-auto mb-1 size-5 text-amber-500" />
                     <p className="text-xs font-medium text-amber-600">Unlinked Thread</p>
-                    <p className="mt-0.5 text-[10px] text-muted-foreground text-pretty">This conversation isn't linked to a client yet.</p>
-                    <Button variant="outline" size="sm" className="mt-2 h-7 text-xs" onClick={() => openActionDialog("link_client")}><Link2 className="mr-1 size-3" /> Link to Client</Button>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground text-pretty">Link to a client to enable task and project creation.</p>
+                    <div className="mt-2 flex gap-1.5 justify-center">
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openActionDialog("link_client")}><Link2 className="mr-1 size-3" /> Link to Client</Button>
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openActionDialog("create_client")}><UserPlus className="mr-1 size-3" /> New Client</Button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -738,8 +787,8 @@ export function CommsShell() {
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground/50 mb-2 flex items-center gap-1"><Zap className="size-3" /> Actions</p>
                 <div className="grid grid-cols-1 gap-1.5">
-                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => openActionDialog("create_task")}><ListPlus className="mr-1.5 size-3.5" /> Create Task</Button>
-                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => openActionDialog("create_project")}><ArrowUpRight className="mr-1.5 size-3.5" /> Create Project</Button>
+                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => openActionDialog("create_task")} disabled={!selected?.client_id}><ListPlus className="mr-1.5 size-3.5" /> Create Task</Button>
+                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => openActionDialog("create_project")} disabled={!selected?.client_id}><ArrowUpRight className="mr-1.5 size-3.5" /> Create Project</Button>
                   <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => openActionDialog("save_fact")} disabled={!selected?.client_id}><Bookmark className="mr-1.5 size-3.5" /> Save Fact to Client</Button>
                   <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => openActionDialog("add_contact")} disabled={!selected?.client_id}><UserPlus className="mr-1.5 size-3.5" /> Add Contact</Button>
                   <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => openActionDialog("set_follow_up")}><CalendarClock className="mr-1.5 size-3.5" /> Set Follow-up</Button>
@@ -982,6 +1031,34 @@ export function CommsShell() {
             <Button variant="outline" size="sm" onClick={closeDialog}>Cancel</Button>
             <Button size="sm" onClick={handleLinkClient} disabled={dialogLoading || !form.linkClientId}>
               {dialogLoading ? "Linking..." : "Link Client"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Client from Conversation */}
+      <Dialog open={activeDialog === "create_client"} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Create New Client</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="new-client-name">Client name</Label>
+              <Input id="new-client-name" value={form.newClientName || ""} onChange={(e) => updateForm("newClientName", e.target.value)} placeholder="Company or person name" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="new-client-email">Email (optional)</Label>
+              <Input id="new-client-email" value={form.newClientEmail || ""} onChange={(e) => updateForm("newClientEmail", e.target.value)} placeholder="client@example.com" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="new-client-phone">Phone (optional)</Label>
+              <Input id="new-client-phone" value={form.newClientPhone || ""} onChange={(e) => updateForm("newClientPhone", e.target.value)} placeholder="+91 98765 43210" className="mt-1" />
+            </div>
+            <p className="text-[10px] text-muted-foreground text-pretty">The conversation will be automatically linked to this new client.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={closeDialog}>Cancel</Button>
+            <Button size="sm" onClick={handleCreateClient} disabled={dialogLoading || !form.newClientName?.trim()}>
+              {dialogLoading ? "Creating..." : "Create & Link"}
             </Button>
           </DialogFooter>
         </DialogContent>

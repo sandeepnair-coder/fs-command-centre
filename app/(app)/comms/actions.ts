@@ -292,6 +292,39 @@ export async function getAuditLog(opts?: { entity_type?: string; entity_id?: str
   return data;
 }
 
+// ─── Conversation Insights ───────────────────────────────────────────────────
+
+export async function getInsights(conversationId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("conversation_insights")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function extractInsights(conversationId: string) {
+  const { extractConversationInsights } = await import("@/lib/channels/insights");
+  await extractConversationInsights(conversationId);
+  return getInsights(conversationId);
+}
+
+export async function resolveInsight(insightId: string) {
+  const supabase = await createClient();
+  const member = await getCurrentMember();
+  const { error } = await supabase.from("conversation_insights").update({
+    is_resolved: true,
+    resolved_at: new Date().toISOString(),
+    resolved_by: member?.id || null,
+    updated_at: new Date().toISOString(),
+  }).eq("id", insightId);
+  if (error) throw error;
+}
+
+// ─── Audit Helper ───────────────────────────────────────────────────────────
+
 async function auditLog(eventType: string, entityType: string, entityId: string, actorId: string | null, metadata?: Record<string, unknown>) {
   const supabase = await createClient();
   await supabase.from("audit_log_events").insert({
