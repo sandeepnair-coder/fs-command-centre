@@ -22,6 +22,64 @@ export const ROTATING_QUOTES = [
   "Done is a myth. There is only 'Done for now.'",
 ];
 
+// ── LOADING QUOTES (per screen) ──────────────
+export const LOADING_QUOTES = {
+  tasks: [
+    "Every great project started as a card nobody wanted to pick up.",
+    "Summoning your columns from the void...",
+    "Your backlog is warming up. Give it a second.",
+    "Kanban: because chaos deserves columns.",
+    "Loading cards. Some of them are overdue. Don't panic.",
+    "Organising your beautiful mess...",
+    "Counting cards. Not the Vegas kind.",
+  ],
+  clients: [
+    "Rounding up your clients. They were scattered.",
+    "Building the Rolodex nobody asked for.",
+    "Every great relationship starts with a loading screen.",
+    "Your clients are on their way. Fashionably late.",
+    "Client data incoming. Try not to play favourites.",
+    "Fetching names, emails, and suppressed frustrations.",
+  ],
+  comms: [
+    "Reading the room. And the threads.",
+    "Syncing conversations. Some of them are spicy.",
+    "Loading messages. Brace for reply-all energy.",
+    "Pulling threads. Not the emotional kind.",
+    "Your inbox called. It has opinions.",
+  ],
+  finance: [
+    "Crunching numbers. Some of them crunch back.",
+    "Loading the money trail. Follow it carefully.",
+    "Counting rupees so you don't have to.",
+    "Spreadsheet vibes, but make it pretty.",
+    "Your finances are loading. Deep breaths.",
+  ],
+  settings: [
+    "Loading preferences. You're very particular.",
+    "Fetching your settings. They were hiding.",
+    "Configuring the configuration configurator.",
+    "Loading the knobs and levers.",
+  ],
+  profile: [
+    "Loading your profile. Looking good already.",
+    "Fetching your details. You're a mystery.",
+    "Your profile is buffering. You're worth the wait.",
+  ],
+  mail: [
+    "Checking mail. Mostly newsletters, probably.",
+    "Loading your inbox. It missed you.",
+    "Sorting messages. The important ones, at least.",
+  ],
+  generic: [
+    "Almost there. Probably.",
+    "Loading things. Important things.",
+    "Patience is a virtue. This is your moment.",
+    "Working on it. No need to refresh.",
+    "Building something beautiful. Give us a sec.",
+  ],
+};
+
 // ── DELETE CONFIRMATIONS ──────────────────────
 export const DELETE = {
   task: {

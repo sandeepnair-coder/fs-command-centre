@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingQuote } from "@/components/ui/loading-quote";
 
 export default function ProfileLoading() {
   return (
@@ -24,6 +25,9 @@ export default function ProfileLoading() {
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-9 w-72 rounded-md" />
         </div>
+      </div>
+      <div className="mt-auto">
+        <LoadingQuote screen="profile" />
       </div>
     </div>
   );

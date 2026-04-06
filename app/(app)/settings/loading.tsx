@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingQuote } from "@/components/ui/loading-quote";
 
 export default function SettingsLoading() {
   return (
@@ -15,6 +16,9 @@ export default function SettingsLoading() {
         <Skeleton className="h-28 rounded-lg" />
         <Skeleton className="h-28 rounded-lg" />
         <Skeleton className="h-28 rounded-lg" />
+      </div>
+      <div className="mt-auto">
+        <LoadingQuote screen="settings" />
       </div>
     </div>
   );

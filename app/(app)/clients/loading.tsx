@@ -1,5 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { LoadingQuote } from "@/components/ui/loading-quote";
 
 export default function ClientsLoading() {
   return (
@@ -13,6 +14,9 @@ export default function ClientsLoading() {
         {[1, 2, 3, 4, 5, 6].map((i) => (
           <Skeleton key={i} className="h-36 rounded-xl" />
         ))}
+      </div>
+      <div className="mt-auto">
+        <LoadingQuote screen="clients" />
       </div>
     </div>
   );

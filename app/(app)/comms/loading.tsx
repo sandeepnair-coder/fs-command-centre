@@ -1,5 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { LoadingQuote } from "@/components/ui/loading-quote";
 
 export default function CommsLoading() {
   return (
@@ -14,6 +15,7 @@ export default function CommsLoading() {
         <Skeleton className="flex-1 h-full" />
         <Skeleton className="w-72 h-full" />
       </div>
+      <LoadingQuote screen="comms" />
     </div>
   );
 }
