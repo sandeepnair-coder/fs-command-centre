@@ -1,6 +1,4 @@
-// ─── Channel Adapter Registry ────────────────────────────────────────────────
-
-import type { ChannelAdapter, ChannelProvider } from "@/lib/types/channels";
+import type { ChannelAdapter, ChannelProvider } from "./types";
 import { gmailAdapter } from "./gmail";
 import { slackAdapter } from "./slack";
 import { whatsappAdapter } from "./whatsapp";

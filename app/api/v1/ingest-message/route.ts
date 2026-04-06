@@ -1,25 +1,11 @@
 import { NextRequest } from "next/server";
 import { verifyAgentAuth, apiError, apiSuccess } from "@/lib/api/auth";
-import { ingestWhatsAppMessage } from "@/lib/channels/ingest";
+import { processWebhookEvent } from "@/lib/channels/sync";
 
 /**
  * POST /api/v1/ingest-message
- *
- * Called by OpenClaw (or any agent) to ingest a raw WhatsApp/channel message
- * into the Comms system. Creates or updates conversations and messages.
- *
- * Body:
- *   from: string          — sender phone/email/ID
- *   to?: string           — recipient (optional)
- *   body: string          — message text
- *   contact_name?: string — sender display name
- *   timestamp?: string    — ISO timestamp
- *   message_id: string    — unique external message ID
- *   channel?: string      — "whatsapp" | "email" | "slack" (default: whatsapp)
- *   has_media?: boolean
- *   media?: { filename, mimetype, url }
- *   quoted_message_id?: string
- *   client_name?: string  — for auto-linking
+ * Ingest a raw message from any channel into the Comms system.
+ * Used by OpenClaw or other agents to forward messages.
  */
 export async function POST(req: NextRequest) {
   const auth = verifyAgentAuth(req);
@@ -27,16 +13,17 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+    const channel = body.channel || "whatsapp";
 
-    if (!body.from || !body.message_id) {
-      return apiError("VALIDATION_ERROR", "from and message_id are required");
-    }
-    if (!body.body && !body.text) {
-      return apiError("VALIDATION_ERROR", "body (message text) is required");
-    }
+    if (!body.from && !body.sender) return apiError("VALIDATION_ERROR", "from is required");
+    if (!body.body && !body.text && !body.message) return apiError("VALIDATION_ERROR", "body is required");
 
-    const result = await ingestWhatsAppMessage(body);
-    return apiSuccess(result, 201);
+    const msgId = body.message_id || body.messageId || body.id || `ingest-${Date.now()}`;
+    const headers: Record<string, string> = {};
+    req.headers.forEach((v, k) => { headers[k] = v; });
+
+    await processWebhookEvent(channel, body, headers, msgId);
+    return apiSuccess({ ingested: true, message_id: msgId }, 201);
   } catch (err) {
     return apiError("INTERNAL_ERROR", (err as Error).message, 500);
   }

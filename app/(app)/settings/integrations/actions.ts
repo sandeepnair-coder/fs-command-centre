@@ -9,7 +9,7 @@ import type {
   ChannelSource,
   ChannelProvider,
   SyncJob,
-} from "@/lib/types/channels";
+} from "@/lib/channels/types";
 
 // ─── Provider Config (API credentials) ──────────────────────────────────────
 
@@ -318,7 +318,7 @@ export async function refreshAvailableSources(connectionId: string) {
   const creds = connection.credentials_encrypted as Record<string, string>;
   if (!creds?.access_token) throw new Error("No credentials");
 
-  const sources = await adapter.listSources(creds.access_token, conn.provider_metadata);
+  const sources = await adapter.listSources(creds.access_token);
 
   for (const source of sources) {
     await supabase.from("channel_sources").upsert({

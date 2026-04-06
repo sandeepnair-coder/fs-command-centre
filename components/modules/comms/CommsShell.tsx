@@ -212,7 +212,8 @@ export function CommsShell() {
   const [activeTab, setActiveTab] = useState<ChannelTab>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [search, setSearch] = useState("");
-  const [conversations, setConversations] = useState<(Conversation & { client_name: string | null })[]>(DEMO_CONVERSATIONS);
+  const [conversations, setConversations] = useState<(Conversation & { client_name: string | null })[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<CommsMessage[]>([]);
   const [clientInsight, setClientInsight] = useState<Awaited<ReturnType<typeof getClientCrmInsight>> | null>(null);
@@ -284,7 +285,7 @@ export function CommsShell() {
         priority: "medium",
         client_id: selected?.client_id || "",
       });
-      if (selected && !selected.id.startsWith("demo-")) {
+      if (selected) {
         await linkTaskToConversation(selected.id, task.id, dialogMsg?.id);
       }
       toast.success("Task created");
@@ -310,10 +311,6 @@ export function CommsShell() {
 
   const handleSaveFact = useCallback(async () => {
     if (!selected?.client_id || !form.factKey?.trim() || !form.factValue?.trim()) return;
-    if (selected.client_id.startsWith("c") && selected.client_id.length <= 2) {
-      toast.error("Cannot save facts for demo clients");
-      return;
-    }
     setDialogLoading(true);
     try {
       await upsertClientFact({
@@ -329,10 +326,6 @@ export function CommsShell() {
 
   const handleAddContact = useCallback(async () => {
     if (!selected?.client_id || !form.contactName?.trim()) return;
-    if (selected.client_id.startsWith("c") && selected.client_id.length <= 2) {
-      toast.error("Cannot add contacts for demo clients");
-      return;
-    }
     setDialogLoading(true);
     try {
       await createClientContact({
@@ -350,10 +343,6 @@ export function CommsShell() {
 
   const handleSetFollowUp = useCallback(async () => {
     if (!selected || !form.followUpDate) return;
-    if (selected.id.startsWith("demo-")) {
-      toast.error("Cannot set follow-ups on demo conversations");
-      return;
-    }
     setDialogLoading(true);
     try {
       await setFollowUpAction(selected.id, new Date(form.followUpDate).toISOString());
@@ -365,12 +354,6 @@ export function CommsShell() {
 
   const handleMarkResolved = useCallback(async () => {
     if (!selected) return;
-    if (selected.id.startsWith("demo-")) {
-      // Update local demo state
-      setConversations((prev) => prev.map((c) => c.id === selected.id ? { ...c, status: "resolved" as ConversationStatus, is_resolved: true } : c));
-      toast.success("Conversation marked as resolved");
-      return;
-    }
     try {
       await updateConversationStatus(selected.id, "resolved");
       setConversations((prev) => prev.map((c) => c.id === selected.id ? { ...c, status: "resolved" as ConversationStatus, is_resolved: true } : c));
@@ -385,10 +368,6 @@ export function CommsShell() {
 
   const handleLinkClient = useCallback(async () => {
     if (!selected || !form.linkClientId) return;
-    if (selected.id.startsWith("demo-")) {
-      toast.error("Cannot link demo conversations");
-      return;
-    }
     setDialogLoading(true);
     try {
       await linkConversationToClient(selected.id, form.linkClientId);
@@ -410,7 +389,7 @@ export function CommsShell() {
         phone: form.newClientPhone?.trim() || undefined,
       });
       // Auto-link the conversation
-      if (selected && !selected.id.startsWith("demo-")) {
+      if (selected) {
         await linkConversationToClient(selected.id, client.id);
       }
       setConversations((prev) => prev.map((c) => c.id === selected?.id ? { ...c, client_id: client.id, client_name: client.name } : c));
@@ -421,11 +400,6 @@ export function CommsShell() {
   }, [form, selected, closeDialog]);
 
   const handleClassifyApproval = useCallback(async (msg: CommsMessage) => {
-    if (msg.id.startsWith("m")) {
-      toast.success("Message marked as Approval");
-      setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, classification: "approval" as any } : m));
-      return;
-    }
     try {
       await classifyMessage(msg.id, "approval");
       setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, classification: "approval" as any } : m));
@@ -433,18 +407,12 @@ export function CommsShell() {
     } catch (e) { toast.error("Failed to classify message"); }
   }, []);
 
-  const [hasRealData, setHasRealData] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "error">("idle");
-
   useEffect(() => {
+    setLoading(true);
     getConversations()
-      .then((data) => {
-        if (data.length > 0) {
-          setConversations(data);
-          setHasRealData(true);
-        }
-      })
-      .catch(() => {});
+      .then((data) => setConversations(data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = conversations.filter((c) => {
@@ -464,9 +432,8 @@ export function CommsShell() {
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
     const convo = conversations.find((c) => c.id === id);
-    if (DEMO_MESSAGES[id]) setMessages(DEMO_MESSAGES[id]);
-    else getMessages(id).then(setMessages).catch(() => setMessages([]));
-    if (convo?.client_id && !convo.client_id.startsWith("c")) {
+    getMessages(id).then(setMessages).catch(() => setMessages([]));
+    if (convo?.client_id) {
       getClientCrmInsight(convo.client_id).then(setClientInsight).catch(() => setClientInsight(null));
     } else {
       setClientInsight(null);
@@ -515,7 +482,12 @@ export function CommsShell() {
 
         {/* Thread list */}
         <ScrollArea className="flex-1">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+              <Inbox className="mb-2 size-8 animate-pulse" />
+              <p className="text-sm font-medium">Loading conversations...</p>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
               <Inbox className="mb-2 size-8" />
               <p className="text-sm font-medium">
@@ -544,7 +516,7 @@ export function CommsShell() {
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1">
-                        <span className="text-xs font-semibold truncate">{convo.client_name || "Unlinked"}</span>
+                        <span className="text-xs font-semibold truncate">{convo.client_name || (convo as any).participants_summary || "Unlinked"}</span>
                         <ChannelIcon channel={convo.channel} className="size-3 shrink-0 text-muted-foreground" />
                         {convo.priority === "urgent" && <span className="size-1.5 rounded-full bg-red-500 shrink-0" />}
                         {convo.priority === "high" && <span className="size-1.5 rounded-full bg-amber-500 shrink-0" />}

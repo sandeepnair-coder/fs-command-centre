@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processWebhookEvent } from "@/lib/channels/sync";
-import { createHmac } from "crypto";
+import { getProviderCredentials } from "@/lib/channels/credentials";
+import { createHmac, timingSafeEqual } from "crypto";
 
-const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || "";
+async function verifySlackSignature(rawBody: string, timestamp: string, signature: string): Promise<boolean> {
+  const creds = await getProviderCredentials("slack");
+  const secret = creds.signing_secret;
+  if (!secret) return false; // Allow if not configured (dev mode)
 
-function verifySlackSignature(body: string, timestamp: string, signature: string): boolean {
-  if (!SLACK_SIGNING_SECRET) return false;
-  const basestring = `v0:${timestamp}:${body}`;
-  const hash = `v0=${createHmac("sha256", SLACK_SIGNING_SECRET).update(basestring).digest("hex")}`;
-  return hash === signature;
+  // Reject requests older than 5 minutes
+  if (Math.abs(Date.now() / 1000 - parseInt(timestamp)) > 300) return false;
+
+  const basestring = `v0:${timestamp}:${rawBody}`;
+  const computed = `v0=${createHmac("sha256", secret).update(basestring).digest("hex")}`;
+
+  try {
+    return timingSafeEqual(Buffer.from(computed), Buffer.from(signature));
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -17,9 +27,11 @@ export async function POST(req: NextRequest) {
     const timestamp = req.headers.get("x-slack-request-timestamp") || "";
     const signature = req.headers.get("x-slack-signature") || "";
 
-    // Verify signature
-    if (SLACK_SIGNING_SECRET && !verifySlackSignature(rawBody, timestamp, signature)) {
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    // Verify signature (skip if signing secret not configured)
+    const creds = await getProviderCredentials("slack");
+    if (creds.signing_secret) {
+      const valid = await verifySlackSignature(rawBody, timestamp, signature);
+      if (!valid) return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
     const payload = JSON.parse(rawBody);
@@ -29,10 +41,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ challenge: payload.challenge });
     }
 
+    // Extract event ID for dedup
+    const externalEventId = payload.event_id || payload.event?.client_msg_id || null;
     const headers: Record<string, string> = {};
     req.headers.forEach((v, k) => { headers[k] = v; });
 
-    processWebhookEvent("slack", payload, headers).catch((err) => {
+    // Process asynchronously
+    processWebhookEvent("slack", payload, headers, externalEventId).catch((err) => {
       console.error("Slack webhook processing error:", err);
     });
 

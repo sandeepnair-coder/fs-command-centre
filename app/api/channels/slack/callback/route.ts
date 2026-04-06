@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       .from("channel_connections")
       .upsert({
         provider: "slack",
-        display_name: result.account_display_name,
+        display_name: result.display_name,
         status: "connected",
         credentials_encrypted: { access_token: result.access_token },
         provider_account_id: result.account_id,
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       event_type: "channel_connected",
       entity_type: "channel_connection",
       entity_id: connection?.id || "unknown",
-      metadata_json: JSON.stringify({ provider: "slack", team: result.account_display_name }),
+      metadata_json: JSON.stringify({ provider: "slack", team: result.display_name }),
     });
 
     return NextResponse.redirect(new URL(`/settings/integrations?connected=slack`, req.url));

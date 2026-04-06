@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       .from("channel_connections")
       .upsert({
         provider: "gmail",
-        display_name: result.account_display_name,
+        display_name: result.display_name,
         status: "connected",
         credentials_encrypted: { access_token: result.access_token },
         token_expires_at: result.expires_at || null,

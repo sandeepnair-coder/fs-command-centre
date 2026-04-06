@@ -64,13 +64,13 @@ import {
   PROVIDER_CONFIG,
   CONNECTION_STATUS_CONFIG,
   SYNC_HEALTH_CONFIG,
-} from "@/lib/types/channels";
+} from "@/lib/channels/types";
 import type {
   ChannelConnection,
   ChannelProvider,
   ChannelSource,
   SyncJob,
-} from "@/lib/types/channels";
+} from "@/lib/channels/types";
 
 const PROVIDER_ICONS: Record<ChannelProvider, React.ElementType> = {
   gmail: Mail,

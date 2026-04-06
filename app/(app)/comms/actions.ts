@@ -305,12 +305,6 @@ export async function getInsights(conversationId: string) {
   return data || [];
 }
 
-export async function extractInsights(conversationId: string) {
-  const { extractConversationInsights } = await import("@/lib/channels/insights");
-  await extractConversationInsights(conversationId);
-  return getInsights(conversationId);
-}
-
 export async function resolveInsight(insightId: string) {
   const supabase = await createClient();
   const member = await getCurrentMember();

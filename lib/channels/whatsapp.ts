@@ -1,118 +1,87 @@
 // ─── WhatsApp Provider Adapter ───────────────────────────────────────────────
-// Reuses the existing OpenClaw gateway path for WhatsApp message ingestion.
-// WhatsApp messages arrive via OpenClaw WS → API routes → this adapter normalizes them.
+// Webhook-driven message ingestion. No OAuth — uses existing provider path.
+// Messages arrive via POST to /api/channels/webhooks/whatsapp.
 
-import type {
-  ChannelAdapter,
-  OAuthCallbackResult,
-  ProviderSource,
-  NormalizedMessage,
-  NormalizedConversation,
-  ChannelSource,
-} from "@/lib/types/channels";
+import type { ChannelAdapter, NormalizedMessage, NormalizedConversation, ProviderSource } from "./types";
 
 function normalizePhone(raw: string): string {
-  // Strip everything except digits and leading +
   const digits = raw.replace(/[^\d+]/g, "");
-  // Ensure E.164 format
   if (digits.startsWith("+")) return digits;
   if (digits.startsWith("91") && digits.length >= 12) return `+${digits}`;
-  if (digits.length === 10) return `+91${digits}`; // Default India
+  if (digits.length === 10) return `+91${digits}`;
   return `+${digits}`;
 }
 
 export const whatsappAdapter: ChannelAdapter = {
   provider: "whatsapp",
 
-  getOAuthUrl(): string {
-    // WhatsApp uses the existing OpenClaw provider path, no OAuth needed
-    throw new Error("WhatsApp connects via OpenClaw gateway — no OAuth flow required");
-  },
+  getOAuthUrl() { throw new Error("WhatsApp does not use OAuth — connect via webhook config"); },
+  async handleOAuthCallback() { throw new Error("WhatsApp does not use OAuth"); },
+  async refreshAccessToken() { throw new Error("WhatsApp tokens managed externally"); },
 
-  async handleOAuthCallback(): Promise<OAuthCallbackResult> {
-    throw new Error("WhatsApp connects via OpenClaw gateway — no OAuth flow required");
-  },
-
-  async refreshToken() {
-    throw new Error("WhatsApp tokens are managed by OpenClaw");
-  },
-
-  async listSources(): Promise<ProviderSource[]> {
-    // WhatsApp has a single "number" source — the configured business number
+  async listSources() {
     const number = process.env.WHATSAPP_BUSINESS_NUMBER || "unknown";
-    return [
-      {
-        external_id: normalizePhone(number),
-        name: `WhatsApp Business (${number})`,
-        source_type: "number",
-        metadata: { provider: "openclaw" },
-      },
-    ];
+    return [{ external_id: normalizePhone(number), name: `WhatsApp (${number})`, source_type: "number" }];
   },
 
-  async backfill(_accessToken, _since, _sources, _onBatch) {
-    // WhatsApp doesn't support historical backfill via API
-    // Messages are ingested in real-time via OpenClaw webhooks
+  async backfill() {
+    // WhatsApp doesn't support historical backfill — inbound only via webhook
     return { messagesCount: 0 };
   },
 
-  async syncIncremental(_accessToken, _cursor, _sources, _onBatch) {
-    // WhatsApp syncs happen via webhook/OpenClaw events, not polling
+  async syncIncremental() {
     return { cursor: new Date().toISOString(), messagesCount: 0 };
   },
 
   async handleWebhook(payload) {
-    // Normalize incoming OpenClaw WhatsApp message payloads
-    // Expected shape from OpenClaw: { from, to, body, timestamp, messageId, ... }
-    const from = payload.from as string;
-    const to = payload.to as string;
-    const body = payload.body as string || payload.text as string || "";
-    const timestamp = payload.timestamp as string || new Date().toISOString();
-    const messageId = payload.messageId as string || payload.message_id as string;
-    const contactName = payload.contactName as string || payload.contact_name as string || from;
+    const from = (payload.from || payload.sender) as string;
+    const body = (payload.body || payload.text || payload.message || "") as string;
+    const msgId = (payload.messageId || payload.message_id || payload.id || `wa-${Date.now()}`) as string;
+    const contactName = (payload.contactName || payload.contact_name || payload.senderName || from) as string;
+    const timestamp = (payload.timestamp || payload.ts || new Date().toISOString()) as string;
 
-    if (!from || !messageId) return null;
+    if (!from || !body) return null;
 
     const normalizedFrom = normalizePhone(from);
-    const normalizedTo = to ? normalizePhone(to) : "business";
     const threadId = `wa:${normalizedFrom}`;
+    const sentAt = new Date(timestamp).toISOString();
+    const isOutbound = !!(payload.is_outbound || payload.direction === "outbound");
 
-    const msg: NormalizedMessage = {
-      external_message_id: messageId,
+    const message: NormalizedMessage = {
+      external_message_id: msgId,
       external_thread_id: threadId,
       channel: "whatsapp",
+      direction: isOutbound ? "outbound" : "inbound",
       sender_display_name: contactName,
       sender_identifier: normalizedFrom,
+      recipient_identifiers: [],
       body_text: body,
       body_html: null,
       has_attachments: !!(payload.hasMedia || payload.has_media),
-      is_from_client: normalizedFrom !== normalizedTo,
-      in_reply_to: (payload.quotedMessageId as string) || null,
       source_url: null,
-      created_at: timestamp,
+      sent_at: sentAt,
+      received_at: sentAt,
       raw_payload: payload,
-      attachments: payload.media
-        ? [
-            {
-              file_name: (payload.media as Record<string, unknown>).filename as string || "media",
-              mime_type: (payload.media as Record<string, unknown>).mimetype as string || null,
-              size_bytes: null,
-              external_url: (payload.media as Record<string, unknown>).url as string || null,
-              provider_file_id: null,
-            },
-          ]
-        : [],
+      attachments: payload.media ? [{
+        external_attachment_id: null,
+        file_name: ((payload.media as Record<string, unknown>).filename as string) || "media",
+        mime_type: ((payload.media as Record<string, unknown>).mimetype as string) || null,
+        file_size: null,
+        external_url: ((payload.media as Record<string, unknown>).url as string) || null,
+      }] : [],
     };
 
-    const convo: NormalizedConversation = {
+    const conversation: NormalizedConversation = {
       external_thread_id: threadId,
       channel: "whatsapp",
       subject: `WhatsApp — ${contactName}`,
+      preview_text: body.slice(0, 150),
       participants: [normalizedFrom],
-      last_message_at: timestamp,
+      participants_summary: contactName,
+      last_message_at: sentAt,
       source_url: null,
     };
 
-    return { messages: [msg], conversations: [convo] };
+    return { messages: [message], conversations: [conversation] };
   },
 };
