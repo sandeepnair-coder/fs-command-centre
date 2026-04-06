@@ -54,6 +54,8 @@ import {
   Activity,
   Palette,
   ShieldCheck,
+  Receipt,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -128,11 +130,36 @@ export function ClientProfile({ client: initial }: { client: Client }) {
       const updated = await updateClient(client.id, {
         name: editForm.name,
         company_name: editForm.company_name,
+        display_name: editForm.display_name,
         primary_email: editForm.primary_email,
         website: editForm.website,
         phone: editForm.phone,
         timezone: editForm.timezone,
         industry: editForm.industry,
+        business_type: editForm.business_type,
+        country: editForm.country,
+        state: editForm.state,
+        city: editForm.city,
+        billing_legal_name: editForm.billing_legal_name,
+        billing_name: editForm.billing_name,
+        gst_number: editForm.gst_number,
+        pan: editForm.pan,
+        cin: editForm.cin,
+        billing_email: editForm.billing_email,
+        billing_phone: editForm.billing_phone,
+        billing_address_line1: editForm.billing_address_line1,
+        billing_address_line2: editForm.billing_address_line2,
+        billing_city: editForm.billing_city,
+        billing_state: editForm.billing_state,
+        billing_postal_code: editForm.billing_postal_code,
+        billing_country: editForm.billing_country,
+        finance_contact_name: editForm.finance_contact_name,
+        finance_contact_email: editForm.finance_contact_email,
+        finance_contact_phone: editForm.finance_contact_phone,
+        payment_terms: editForm.payment_terms,
+        currency: editForm.currency,
+        po_invoice_notes: editForm.po_invoice_notes,
+        tax_notes: editForm.tax_notes,
       });
       setClient(updated);
       setEditing(false);
@@ -297,38 +324,51 @@ export function ClientProfile({ client: initial }: { client: Client }) {
 
       {/* Edit Dialog */}
       <Dialog open={editing} onOpenChange={setEditing}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Client</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-3 py-2">
-            <div className="space-y-1.5 col-span-2">
-              <Label className="text-sm">Name</Label>
-              <Input value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} />
+          <div className="space-y-4 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-foreground/50">Basic Details</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-sm">Name</Label>
+                <Input value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} />
+              </div>
+              <EditField label="Company" value={editForm.company_name} onChange={(v) => setEditForm((p) => ({ ...p, company_name: v }))} />
+              <EditField label="Display Name" value={editForm.display_name} onChange={(v) => setEditForm((p) => ({ ...p, display_name: v }))} />
+              <EditField label="Industry" value={editForm.industry} onChange={(v) => setEditForm((p) => ({ ...p, industry: v }))} />
+              <EditField label="Business Type" value={editForm.business_type} onChange={(v) => setEditForm((p) => ({ ...p, business_type: v }))} placeholder="e.g. Pvt Ltd, LLP" />
+              <EditField label="Email" value={editForm.primary_email} onChange={(v) => setEditForm((p) => ({ ...p, primary_email: v }))} />
+              <EditField label="Phone" value={editForm.phone} onChange={(v) => setEditForm((p) => ({ ...p, phone: v }))} />
+              <EditField label="Website" value={editForm.website} onChange={(v) => setEditForm((p) => ({ ...p, website: v }))} />
+              <EditField label="Timezone" value={editForm.timezone} onChange={(v) => setEditForm((p) => ({ ...p, timezone: v }))} placeholder="e.g. IST, EST" />
+              <EditField label="Country" value={editForm.country} onChange={(v) => setEditForm((p) => ({ ...p, country: v }))} />
+              <EditField label="State" value={editForm.state} onChange={(v) => setEditForm((p) => ({ ...p, state: v }))} />
+              <EditField label="City" value={editForm.city} onChange={(v) => setEditForm((p) => ({ ...p, city: v }))} />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">Company</Label>
-              <Input value={editForm.company_name || ""} onChange={(e) => setEditForm((p) => ({ ...p, company_name: e.target.value || null }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">Industry</Label>
-              <Input value={editForm.industry || ""} onChange={(e) => setEditForm((p) => ({ ...p, industry: e.target.value || null }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">Email</Label>
-              <Input value={editForm.primary_email || ""} onChange={(e) => setEditForm((p) => ({ ...p, primary_email: e.target.value || null }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">Phone</Label>
-              <Input value={editForm.phone || ""} onChange={(e) => setEditForm((p) => ({ ...p, phone: e.target.value || null }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">Website</Label>
-              <Input value={editForm.website || ""} onChange={(e) => setEditForm((p) => ({ ...p, website: e.target.value || null }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">Timezone</Label>
-              <Input value={editForm.timezone || ""} onChange={(e) => setEditForm((p) => ({ ...p, timezone: e.target.value || null }))} placeholder="e.g. IST, EST" />
+
+            <p className="text-xs font-semibold uppercase tracking-wider text-foreground/50 pt-2">Billing & Tax</p>
+            <div className="grid grid-cols-2 gap-3">
+              <EditField label="Legal Entity Name" value={editForm.billing_legal_name} onChange={(v) => setEditForm((p) => ({ ...p, billing_legal_name: v }))} />
+              <EditField label="Billing Name" value={editForm.billing_name} onChange={(v) => setEditForm((p) => ({ ...p, billing_name: v }))} />
+              <EditField label="GST / Tax ID" value={editForm.gst_number} onChange={(v) => setEditForm((p) => ({ ...p, gst_number: v }))} />
+              <EditField label="PAN" value={editForm.pan} onChange={(v) => setEditForm((p) => ({ ...p, pan: v }))} />
+              <EditField label="CIN" value={editForm.cin} onChange={(v) => setEditForm((p) => ({ ...p, cin: v }))} />
+              <EditField label="Billing Email" value={editForm.billing_email} onChange={(v) => setEditForm((p) => ({ ...p, billing_email: v }))} />
+              <EditField label="Billing Phone" value={editForm.billing_phone} onChange={(v) => setEditForm((p) => ({ ...p, billing_phone: v }))} />
+              <div />
+              <EditField label="Address Line 1" value={editForm.billing_address_line1} onChange={(v) => setEditForm((p) => ({ ...p, billing_address_line1: v }))} className="col-span-2" />
+              <EditField label="Address Line 2" value={editForm.billing_address_line2} onChange={(v) => setEditForm((p) => ({ ...p, billing_address_line2: v }))} className="col-span-2" />
+              <EditField label="City" value={editForm.billing_city} onChange={(v) => setEditForm((p) => ({ ...p, billing_city: v }))} />
+              <EditField label="State" value={editForm.billing_state} onChange={(v) => setEditForm((p) => ({ ...p, billing_state: v }))} />
+              <EditField label="Postal Code" value={editForm.billing_postal_code} onChange={(v) => setEditForm((p) => ({ ...p, billing_postal_code: v }))} />
+              <EditField label="Country" value={editForm.billing_country} onChange={(v) => setEditForm((p) => ({ ...p, billing_country: v }))} />
+              <EditField label="Finance Contact" value={editForm.finance_contact_name} onChange={(v) => setEditForm((p) => ({ ...p, finance_contact_name: v }))} />
+              <EditField label="Finance Email" value={editForm.finance_contact_email} onChange={(v) => setEditForm((p) => ({ ...p, finance_contact_email: v }))} />
+              <EditField label="Finance Phone" value={editForm.finance_contact_phone} onChange={(v) => setEditForm((p) => ({ ...p, finance_contact_phone: v }))} />
+              <EditField label="Payment Terms" value={editForm.payment_terms} onChange={(v) => setEditForm((p) => ({ ...p, payment_terms: v }))} placeholder="e.g. Net 30" />
+              <EditField label="Currency" value={editForm.currency} onChange={(v) => setEditForm((p) => ({ ...p, currency: v }))} placeholder="INR" />
             </div>
           </div>
           <DialogFooter>
@@ -347,6 +387,7 @@ export function ClientProfile({ client: initial }: { client: Client }) {
           <TabsTrigger value="assets" className="gap-1 text-xs"><FileText className="size-3" /> Assets</TabsTrigger>
           <TabsTrigger value="intelligence" className="gap-1 text-xs"><Brain className="size-3" /> Intelligence</TabsTrigger>
           <TabsTrigger value="activity" className="gap-1 text-xs"><Activity className="size-3" /> Activity Log</TabsTrigger>
+          <TabsTrigger value="billing" className="gap-1 text-xs"><Receipt className="size-3" /> Billing & Tax</TabsTrigger>
         </TabsList>
 
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -360,6 +401,10 @@ export function ClientProfile({ client: initial }: { client: Client }) {
                 <InfoCard icon={Phone} label="Phone" value={client.phone} />
                 <InfoCard icon={MapPin} label="Timezone" value={client.timezone} />
                 <InfoCard icon={ShieldCheck} label="Industry" value={client.industry} />
+                {client.business_type && <InfoCard icon={Building2} label="Business Type" value={client.business_type} />}
+                {(client.city || client.state || client.country) && (
+                  <InfoCard icon={MapPin} label="Location" value={[client.city, client.state, client.country].filter(Boolean).join(", ")} />
+                )}
 
                 {/* Work Streams */}
                 <div className="col-span-2 rounded-xl border bg-card p-4">
@@ -669,6 +714,90 @@ export function ClientProfile({ client: initial }: { client: Client }) {
               </div>
             </ScrollArea>
           </TabsContent>
+
+          {/* ─── Billing & Tax ─── */}
+          <TabsContent value="billing" className="h-full mt-0">
+            <ScrollArea className="h-full">
+              <div className="space-y-4 pb-4">
+                <p className="text-sm font-medium">Billing & Tax Details</p>
+
+                {/* Tax Registration */}
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground/50 mb-2">Tax Registration</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <InfoCard icon={Building2} label="Legal Entity Name" value={client.billing_legal_name} />
+                    <InfoCard icon={CreditCard} label="Billing Name" value={client.billing_name} />
+                    <InfoCard icon={Receipt} label="GST / VAT / Tax ID" value={client.gst_number} />
+                    <InfoCard icon={ShieldCheck} label="PAN" value={client.pan} />
+                    <InfoCard icon={FileText} label="CIN / Registration No." value={client.cin} />
+                  </div>
+                </div>
+
+                {/* Billing Address */}
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground/50 mb-2">Billing Address</p>
+                  <div className="rounded-xl border bg-card p-3">
+                    {client.billing_address_line1 || client.billing_city ? (
+                      <div className="text-sm space-y-0.5">
+                        {client.billing_address_line1 && <p>{client.billing_address_line1}</p>}
+                        {client.billing_address_line2 && <p>{client.billing_address_line2}</p>}
+                        <p className="text-muted-foreground">
+                          {[client.billing_city, client.billing_state, client.billing_postal_code].filter(Boolean).join(", ")}
+                        </p>
+                        {client.billing_country && <p className="text-muted-foreground">{client.billing_country}</p>}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground/50 italic">Not set</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Billing Contact */}
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground/50 mb-2">Billing Contact</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <InfoCard icon={Mail} label="Billing Email" value={client.billing_email} />
+                    <InfoCard icon={Phone} label="Billing Phone" value={client.billing_phone} />
+                  </div>
+                </div>
+
+                {/* Finance Contact */}
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground/50 mb-2">Finance Contact</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <InfoCard icon={User} label="Name" value={client.finance_contact_name} />
+                    <InfoCard icon={Mail} label="Email" value={client.finance_contact_email} />
+                    <InfoCard icon={Phone} label="Phone" value={client.finance_contact_phone} />
+                  </div>
+                </div>
+
+                {/* Payment */}
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground/50 mb-2">Payment & Notes</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <InfoCard icon={CreditCard} label="Payment Terms" value={client.payment_terms} />
+                    <InfoCard icon={Receipt} label="Currency" value={client.currency} />
+                  </div>
+                  {(client.po_invoice_notes || client.tax_notes) && (
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {client.po_invoice_notes && (
+                        <div className="rounded-xl border bg-card p-3">
+                          <p className="text-[11px] font-medium text-foreground/50 mb-1">PO / Invoice Notes</p>
+                          <p className="text-sm text-foreground whitespace-pre-wrap">{client.po_invoice_notes}</p>
+                        </div>
+                      )}
+                      {client.tax_notes && (
+                        <div className="rounded-xl border bg-card p-3">
+                          <p className="text-[11px] font-medium text-foreground/50 mb-1">Tax Notes</p>
+                          <p className="text-sm text-foreground whitespace-pre-wrap">{client.tax_notes}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </ScrollArea>
+          </TabsContent>
         </div>
       </Tabs>
     </div>
@@ -686,6 +815,32 @@ function InfoCard({ icon: Icon, label, value }: { icon: React.ElementType; label
       <p className={cn("text-sm", value ? "text-foreground" : "text-muted-foreground/50 italic")}>
         {value || "Not set"}
       </p>
+    </div>
+  );
+}
+
+function EditField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (v: string | null) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <Label className="text-sm">{label}</Label>
+      <Input
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        placeholder={placeholder}
+        className="h-8"
+      />
     </div>
   );
 }

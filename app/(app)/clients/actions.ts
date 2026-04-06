@@ -39,24 +39,80 @@ export async function getClientById(clientId: string) {
 export async function createClientFull(opts: {
   name: string;
   company_name?: string;
+  display_name?: string;
   primary_email?: string;
   website?: string;
   phone?: string;
   timezone?: string;
   industry?: string;
+  business_type?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  notes?: string;
+  // Billing & Tax
+  billing_legal_name?: string;
+  billing_name?: string;
+  gst_number?: string;
+  pan?: string;
+  cin?: string;
+  billing_email?: string;
+  billing_phone?: string;
+  billing_address_line1?: string;
+  billing_address_line2?: string;
+  billing_city?: string;
+  billing_state?: string;
+  billing_postal_code?: string;
+  billing_country?: string;
+  finance_contact_name?: string;
+  finance_contact_email?: string;
+  finance_contact_phone?: string;
+  payment_terms?: string;
+  currency?: string;
+  po_invoice_notes?: string;
+  tax_notes?: string;
 }) {
   const supabase = await createClient();
   if (!opts.name?.trim()) throw new Error("Client name is required");
+
+  const trimOrNull = (v?: string) => v?.trim() || null;
+
   const { data, error } = await supabase
     .from("clients")
     .insert({
       name: opts.name.trim(),
-      company_name: opts.company_name?.trim() || null,
-      primary_email: opts.primary_email?.trim() || null,
-      website: opts.website?.trim() || null,
-      phone: opts.phone?.trim() || null,
-      timezone: opts.timezone?.trim() || null,
-      industry: opts.industry?.trim() || null,
+      company_name: trimOrNull(opts.company_name),
+      display_name: trimOrNull(opts.display_name),
+      primary_email: trimOrNull(opts.primary_email),
+      website: trimOrNull(opts.website),
+      phone: trimOrNull(opts.phone),
+      timezone: trimOrNull(opts.timezone),
+      industry: trimOrNull(opts.industry),
+      business_type: trimOrNull(opts.business_type),
+      country: trimOrNull(opts.country),
+      state: trimOrNull(opts.state),
+      city: trimOrNull(opts.city),
+      notes: trimOrNull(opts.notes),
+      billing_legal_name: trimOrNull(opts.billing_legal_name),
+      billing_name: trimOrNull(opts.billing_name),
+      gst_number: trimOrNull(opts.gst_number),
+      pan: trimOrNull(opts.pan),
+      cin: trimOrNull(opts.cin),
+      billing_email: trimOrNull(opts.billing_email),
+      billing_phone: trimOrNull(opts.billing_phone),
+      billing_address_line1: trimOrNull(opts.billing_address_line1),
+      billing_address_line2: trimOrNull(opts.billing_address_line2),
+      billing_city: trimOrNull(opts.billing_city),
+      billing_state: trimOrNull(opts.billing_state),
+      billing_postal_code: trimOrNull(opts.billing_postal_code),
+      billing_country: trimOrNull(opts.billing_country),
+      finance_contact_name: trimOrNull(opts.finance_contact_name),
+      finance_contact_email: trimOrNull(opts.finance_contact_email),
+      finance_contact_phone: trimOrNull(opts.finance_contact_phone),
+      payment_terms: trimOrNull(opts.payment_terms),
+      currency: trimOrNull(opts.currency),
+      po_invoice_notes: trimOrNull(opts.po_invoice_notes),
+      tax_notes: trimOrNull(opts.tax_notes),
     })
     .select()
     .single();
@@ -324,6 +380,77 @@ export async function getClientStats() {
     task_count: taskCounts[c.id] || 0,
     conversation_count: convoCounts[c.id] || 0,
   }));
+}
+
+// ─── Advanced Intake Batch ───────────────────────────────────────────────────
+
+export async function batchCreateClientExtras(clientId: string, extras: {
+  contacts?: { name: string; role?: string; email?: string; phone?: string; is_primary?: boolean; is_billing?: boolean; notes?: string }[];
+  facts?: { key: string; value: string }[];
+  assets?: { file_name: string; storage_url: string; type: BrandAsset["type"] }[];
+}) {
+  const supabase = await createClient();
+  const member = await getCurrentMember();
+
+  // Contacts
+  if (extras.contacts?.length) {
+    const contactInserts = extras.contacts
+      .filter((c) => c.name.trim())
+      .map((c) => ({
+        client_id: clientId,
+        name: c.name.trim(),
+        role: c.role?.trim() || null,
+        email: c.email?.trim() || null,
+        phone: c.phone?.trim() || null,
+        notes: [
+          c.is_primary ? "Primary Contact" : "",
+          c.is_billing ? "Billing/Finance Contact" : "",
+          c.notes?.trim() || "",
+        ].filter(Boolean).join(". ") || null,
+        verification_status: "verified" as const,
+      }));
+    if (contactInserts.length > 0) {
+      await supabase.from("client_contacts").insert(contactInserts);
+    }
+  }
+
+  // Facts (brand fields + intelligence)
+  if (extras.facts?.length) {
+    for (const f of extras.facts) {
+      if (!f.key.trim() || !f.value.trim()) continue;
+      await supabase.from("client_facts").upsert({
+        client_id: clientId,
+        key: f.key.trim(),
+        value: f.value.trim(),
+        verification_status: "verified",
+        accepted_at: new Date().toISOString(),
+        accepted_by_user_id: member?.id || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "client_id,key", ignoreDuplicates: false });
+    }
+  }
+
+  // Assets
+  if (extras.assets?.length) {
+    const assetInserts = extras.assets
+      .filter((a) => a.file_name.trim() && a.storage_url.trim())
+      .map((a) => ({
+        client_id: clientId,
+        type: a.type,
+        file_name: a.file_name.trim(),
+        storage_url: a.storage_url.trim(),
+        verification_status: "verified" as const,
+      }));
+    if (assetInserts.length > 0) {
+      await supabase.from("brand_assets").insert(assetInserts);
+    }
+  }
+
+  await logAudit("client_advanced_intake", "client", clientId, member?.id || null, {
+    contacts: extras.contacts?.length || 0,
+    facts: extras.facts?.length || 0,
+    assets: extras.assets?.length || 0,
+  });
 }
 
 // ─── Audit helper ───────────────────────────────────────────────────────────
