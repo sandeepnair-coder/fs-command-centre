@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { processWebhookEvent } from "@/lib/channels/sync";
+import { ingestWhatsAppMessage } from "@/lib/channels/ingest";
 
-// WhatsApp messages arrive via OpenClaw gateway
-// This endpoint receives normalized WhatsApp messages and feeds them into the sync engine
+// WhatsApp messages arrive via OpenClaw gateway or direct webhook
+// This endpoint receives WhatsApp messages and writes them to Comms
 export async function POST(req: NextRequest) {
   try {
     // Verify OpenClaw token
@@ -13,15 +13,25 @@ export async function POST(req: NextRequest) {
     }
 
     const payload = await req.json();
-    const headers: Record<string, string> = {};
-    req.headers.forEach((v, k) => { headers[k] = v; });
 
-    processWebhookEvent("whatsapp", payload, headers).catch((err) => {
-      console.error("WhatsApp webhook processing error:", err);
+    // Directly ingest into comms tables
+    const result = await ingestWhatsAppMessage({
+      from: payload.from || payload.sender,
+      to: payload.to || payload.recipient,
+      body: payload.body || payload.text || payload.message,
+      contact_name: payload.contactName || payload.contact_name || payload.senderName,
+      timestamp: payload.timestamp || payload.ts,
+      message_id: payload.messageId || payload.message_id || payload.id || `wa-${Date.now()}`,
+      channel: "whatsapp",
+      has_media: payload.hasMedia || payload.has_media,
+      media: payload.media,
+      quoted_message_id: payload.quotedMessageId || payload.quoted_message_id,
+      client_name: payload.clientName || payload.client_name,
     });
 
-    return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ ok: false }, { status: 400 });
+    return NextResponse.json({ ok: true, ...result });
+  } catch (err) {
+    console.error("WhatsApp webhook error:", err);
+    return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });
   }
 }

@@ -123,6 +123,24 @@ export async function createTasksForProject(input: CreateTasksInput) {
   const result = { project_id: projectId, tasks: created, message: `${created.filter((t) => !t.deduplicated).length} tasks created` };
   if (input.idempotency_key) await supabase.from("idempotency_keys").insert({ key: input.idempotency_key, entity_type: "task_batch", entity_id: projectId, response_json: result });
   await audit("tasks_created_by_agent", "project", projectId, input.agent_run_id, { count: created.length });
+
+  // Bridge: if source_channel is set, also write to Comms
+  if (input.source_channel && input.source_channel !== "manual" && input.source_channel !== "api") {
+    try {
+      const { bridgeAgentMessage } = await import("@/lib/channels/ingest");
+      for (const t of input.tasks) {
+        if (t.source_message_id) {
+          await bridgeAgentMessage({
+            source_channel: input.source_channel,
+            source_message_id: t.source_message_id,
+            client_id: projectClientId,
+            body: `[Task created] ${t.title}${t.description ? ": " + t.description : ""}`,
+          });
+        }
+      }
+    } catch { /* non-critical */ }
+  }
+
   return result;
 }
 
