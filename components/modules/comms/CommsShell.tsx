@@ -44,8 +44,38 @@ import {
   CircleDot,
   UserPlus,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { getConversations, getMessages, getClientCrmInsight } from "@/app/(app)/comms/actions";
+import { toast } from "sonner";
+import {
+  getConversations,
+  getMessages,
+  getClientCrmInsight,
+  updateConversationStatus,
+  setFollowUp as setFollowUpAction,
+  linkConversationToClient,
+  classifyMessage,
+  linkTaskToConversation,
+  getProjectColumns,
+} from "@/app/(app)/comms/actions";
+import {
+  getProjects,
+  createProject,
+  createTask,
+  getClients,
+} from "@/app/(app)/tasks/actions";
+import {
+  createClientContact,
+  upsertClientFact,
+} from "@/app/(app)/clients/actions";
 import type {
   Conversation,
   CommsMessage,
@@ -186,6 +216,193 @@ export function CommsShell() {
   const [messages, setMessages] = useState<CommsMessage[]>([]);
   const [clientInsight, setClientInsight] = useState<Awaited<ReturnType<typeof getClientCrmInsight>> | null>(null);
 
+  const selected = conversations.find((c) => c.id === selectedId);
+
+  // ── Dialog state ────────────────────────────────────────────────────────────
+  const [activeDialog, setActiveDialog] = useState<string | null>(null);
+  const [dialogMsg, setDialogMsg] = useState<CommsMessage | null>(null);
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [dialogLoading, setDialogLoading] = useState(false);
+  const [projectsList, setProjectsList] = useState<{ id: string; name: string; client_id?: string | null }[]>([]);
+  const [columnsList, setColumnsList] = useState<{ id: string; name: string }[]>([]);
+  const [clientsList, setClientsList] = useState<{ id: string; name: string }[]>([]);
+
+  const openActionDialog = useCallback((type: string, msg?: CommsMessage) => {
+    setActiveDialog(type);
+    setDialogMsg(msg || null);
+    setForm({});
+    setDialogLoading(false);
+    // Pre-fetch data needed by specific dialogs
+    if (type === "create_task" || type === "create_project") {
+      getProjects().then(setProjectsList).catch(() => {});
+    }
+    if (type === "create_task" || type === "create_project" || type === "link_client") {
+      getClients().then(setClientsList).catch(() => {});
+    }
+  }, []);
+
+  const closeDialog = useCallback(() => {
+    setActiveDialog(null);
+    setDialogMsg(null);
+    setForm({});
+    setDialogLoading(false);
+    setColumnsList([]);
+  }, []);
+
+  const updateForm = useCallback((key: string, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  // Load columns when project changes in Create Task dialog
+  const handleProjectChange = useCallback((projectId: string) => {
+    updateForm("projectId", projectId);
+    if (projectId) {
+      getProjectColumns(projectId).then(setColumnsList).catch(() => setColumnsList([]));
+    } else {
+      setColumnsList([]);
+    }
+  }, [updateForm]);
+
+  // ── Action handlers ─────────────────────────────────────────────────────────
+  const handleCreateTask = useCallback(async () => {
+    if (!form.projectId || !form.title?.trim()) return;
+    setDialogLoading(true);
+    try {
+      const colId = form.columnId || columnsList[0]?.id;
+      if (!colId) { toast.error("No columns found for this project"); return; }
+      const task = await createTask(form.projectId, colId, form.title.trim(), {
+        priority: "medium",
+        client_id: selected?.client_id || "",
+      });
+      if (selected && !selected.id.startsWith("demo-")) {
+        await linkTaskToConversation(selected.id, task.id, dialogMsg?.id);
+      }
+      toast.success("Task created");
+      closeDialog();
+    } catch (e) { toast.error("Failed to create task"); }
+    finally { setDialogLoading(false); }
+  }, [form, columnsList, selected, dialogMsg, closeDialog]);
+
+  const handleCreateProject = useCallback(async () => {
+    if (!form.projectName?.trim()) return;
+    setDialogLoading(true);
+    try {
+      await createProject({
+        name: form.projectName.trim(),
+        client_id: selected?.client_id || form.clientId || null,
+        description: form.projectDesc?.trim() || null,
+      });
+      toast.success("Project created");
+      closeDialog();
+    } catch (e) { toast.error("Failed to create project"); }
+    finally { setDialogLoading(false); }
+  }, [form, selected, closeDialog]);
+
+  const handleSaveFact = useCallback(async () => {
+    if (!selected?.client_id || !form.factKey?.trim() || !form.factValue?.trim()) return;
+    if (selected.client_id.startsWith("c") && selected.client_id.length <= 2) {
+      toast.error("Cannot save facts for demo clients");
+      return;
+    }
+    setDialogLoading(true);
+    try {
+      await upsertClientFact({
+        client_id: selected.client_id,
+        key: form.factKey.trim(),
+        value: form.factValue.trim(),
+      });
+      toast.success("Fact saved to client profile");
+      closeDialog();
+    } catch (e) { toast.error("Failed to save fact"); }
+    finally { setDialogLoading(false); }
+  }, [form, selected, closeDialog]);
+
+  const handleAddContact = useCallback(async () => {
+    if (!selected?.client_id || !form.contactName?.trim()) return;
+    if (selected.client_id.startsWith("c") && selected.client_id.length <= 2) {
+      toast.error("Cannot add contacts for demo clients");
+      return;
+    }
+    setDialogLoading(true);
+    try {
+      await createClientContact({
+        client_id: selected.client_id,
+        name: form.contactName.trim(),
+        role: form.contactRole?.trim() || undefined,
+        email: form.contactEmail?.trim() || undefined,
+        phone: form.contactPhone?.trim() || undefined,
+      });
+      toast.success("Contact added");
+      closeDialog();
+    } catch (e) { toast.error("Failed to add contact"); }
+    finally { setDialogLoading(false); }
+  }, [form, selected, closeDialog]);
+
+  const handleSetFollowUp = useCallback(async () => {
+    if (!selected || !form.followUpDate) return;
+    if (selected.id.startsWith("demo-")) {
+      toast.error("Cannot set follow-ups on demo conversations");
+      return;
+    }
+    setDialogLoading(true);
+    try {
+      await setFollowUpAction(selected.id, new Date(form.followUpDate).toISOString());
+      toast.success("Follow-up set");
+      closeDialog();
+    } catch (e) { toast.error("Failed to set follow-up"); }
+    finally { setDialogLoading(false); }
+  }, [form, selected, closeDialog]);
+
+  const handleMarkResolved = useCallback(async () => {
+    if (!selected) return;
+    if (selected.id.startsWith("demo-")) {
+      // Update local demo state
+      setConversations((prev) => prev.map((c) => c.id === selected.id ? { ...c, status: "resolved" as ConversationStatus, is_resolved: true } : c));
+      toast.success("Conversation marked as resolved");
+      return;
+    }
+    try {
+      await updateConversationStatus(selected.id, "resolved");
+      setConversations((prev) => prev.map((c) => c.id === selected.id ? { ...c, status: "resolved" as ConversationStatus, is_resolved: true } : c));
+      toast.success("Conversation marked as resolved");
+    } catch (e) { toast.error("Failed to mark resolved"); }
+  }, [selected]);
+
+  const handleCopySourceLink = useCallback(() => {
+    const url = `${window.location.origin}/comms?thread=${selected?.id || ""}`;
+    navigator.clipboard.writeText(url).then(() => toast.success("Link copied to clipboard")).catch(() => toast.error("Failed to copy"));
+  }, [selected]);
+
+  const handleLinkClient = useCallback(async () => {
+    if (!selected || !form.linkClientId) return;
+    if (selected.id.startsWith("demo-")) {
+      toast.error("Cannot link demo conversations");
+      return;
+    }
+    setDialogLoading(true);
+    try {
+      await linkConversationToClient(selected.id, form.linkClientId);
+      const client = clientsList.find((c) => c.id === form.linkClientId);
+      setConversations((prev) => prev.map((c) => c.id === selected.id ? { ...c, client_id: form.linkClientId, client_name: client?.name || "Linked" } : c));
+      toast.success("Conversation linked to client");
+      closeDialog();
+    } catch (e) { toast.error("Failed to link client"); }
+    finally { setDialogLoading(false); }
+  }, [form, selected, clientsList, closeDialog]);
+
+  const handleClassifyApproval = useCallback(async (msg: CommsMessage) => {
+    if (msg.id.startsWith("m")) {
+      toast.success("Message marked as Approval");
+      setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, classification: "approval" as any } : m));
+      return;
+    }
+    try {
+      await classifyMessage(msg.id, "approval");
+      setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, classification: "approval" as any } : m));
+      toast.success("Message marked as Approval");
+    } catch (e) { toast.error("Failed to classify message"); }
+  }, []);
+
   useEffect(() => {
     getConversations().then((data) => { if (data.length > 0) setConversations(data); }).catch(() => {});
   }, []);
@@ -215,8 +432,6 @@ export function CommsShell() {
       setClientInsight(null);
     }
   }, [conversations]);
-
-  const selected = conversations.find((c) => c.id === selectedId);
 
   return (
     <div className="flex h-full overflow-hidden rounded-lg border bg-card">
@@ -377,11 +592,11 @@ export function CommsShell() {
                     <p className="mt-2 text-sm text-foreground/80 whitespace-pre-wrap text-pretty leading-relaxed">{msg.body_text}</p>
                     {/* Inline actions */}
                     <div className="mt-2 flex flex-wrap gap-1 opacity-0 hover:opacity-100 transition-opacity focus-within:opacity-100">
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2"><ListPlus className="mr-0.5 size-3" /> Task</Button>
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2"><Bookmark className="mr-0.5 size-3" /> Fact</Button>
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2"><UserPlus className="mr-0.5 size-3" /> Contact</Button>
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2"><ThumbsUp className="mr-0.5 size-3" /> Approval</Button>
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2"><CalendarClock className="mr-0.5 size-3" /> Follow-up</Button>
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => { openActionDialog("create_task", msg); updateForm("title", msg.body_text.slice(0, 80)); }}><ListPlus className="mr-0.5 size-3" /> Task</Button>
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => { openActionDialog("save_fact", msg); updateForm("factValue", msg.body_text.slice(0, 200)); }}><Bookmark className="mr-0.5 size-3" /> Fact</Button>
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => { openActionDialog("add_contact", msg); updateForm("contactName", msg.sender_display_name || ""); updateForm("contactEmail", msg.sender_identifier || ""); }}><UserPlus className="mr-0.5 size-3" /> Contact</Button>
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => handleClassifyApproval(msg)}><ThumbsUp className="mr-0.5 size-3" /> Approval</Button>
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => openActionDialog("set_follow_up", msg)}><CalendarClock className="mr-0.5 size-3" /> Follow-up</Button>
                     </div>
                   </div>
                 ))}
@@ -444,7 +659,7 @@ export function CommsShell() {
                     <AlertTriangle className="mx-auto mb-1 size-5 text-amber-500" />
                     <p className="text-xs font-medium text-amber-600">Unlinked Thread</p>
                     <p className="mt-0.5 text-[10px] text-muted-foreground text-pretty">This conversation isn't linked to a client yet.</p>
-                    <Button variant="outline" size="sm" className="mt-2 h-7 text-xs"><Link2 className="mr-1 size-3" /> Link to Client</Button>
+                    <Button variant="outline" size="sm" className="mt-2 h-7 text-xs" onClick={() => openActionDialog("link_client")}><Link2 className="mr-1 size-3" /> Link to Client</Button>
                   </div>
                 )}
               </div>
@@ -523,13 +738,13 @@ export function CommsShell() {
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground/50 mb-2 flex items-center gap-1"><Zap className="size-3" /> Actions</p>
                 <div className="grid grid-cols-1 gap-1.5">
-                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs"><ListPlus className="mr-1.5 size-3.5" /> Create Task</Button>
-                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs"><ArrowUpRight className="mr-1.5 size-3.5" /> Create Project</Button>
-                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs"><Bookmark className="mr-1.5 size-3.5" /> Save Fact to Client</Button>
-                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs"><UserPlus className="mr-1.5 size-3.5" /> Add Contact</Button>
-                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs"><CalendarClock className="mr-1.5 size-3.5" /> Set Follow-up</Button>
-                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs"><CheckCircle2 className="mr-1.5 size-3.5" /> Mark Resolved</Button>
-                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs"><Copy className="mr-1.5 size-3.5" /> Copy Source Link</Button>
+                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => openActionDialog("create_task")}><ListPlus className="mr-1.5 size-3.5" /> Create Task</Button>
+                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => openActionDialog("create_project")}><ArrowUpRight className="mr-1.5 size-3.5" /> Create Project</Button>
+                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => openActionDialog("save_fact")} disabled={!selected?.client_id}><Bookmark className="mr-1.5 size-3.5" /> Save Fact to Client</Button>
+                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => openActionDialog("add_contact")} disabled={!selected?.client_id}><UserPlus className="mr-1.5 size-3.5" /> Add Contact</Button>
+                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={() => openActionDialog("set_follow_up")}><CalendarClock className="mr-1.5 size-3.5" /> Set Follow-up</Button>
+                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={handleMarkResolved}><CheckCircle2 className="mr-1.5 size-3.5" /> Mark Resolved</Button>
+                  <Button variant="outline" size="sm" className="h-8 justify-start text-xs" onClick={handleCopySourceLink}><Copy className="mr-1.5 size-3.5" /> Copy Source Link</Button>
                 </div>
               </div>
 
@@ -591,6 +806,186 @@ export function CommsShell() {
           </div>
         )}
       </div>
+
+      {/* ═══ DIALOGS ═══ */}
+
+      {/* Create Task */}
+      <Dialog open={activeDialog === "create_task"} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Create Task from Conversation</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="task-title">Task title</Label>
+              <Input id="task-title" value={form.title || ""} onChange={(e) => updateForm("title", e.target.value)} placeholder="What needs to be done?" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="task-project">Project</Label>
+              <Select value={form.projectId || ""} onValueChange={handleProjectChange}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select a project" /></SelectTrigger>
+                <SelectContent>
+                  {projectsList.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {columnsList.length > 0 && (
+              <div>
+                <Label htmlFor="task-column">Column</Label>
+                <Select value={form.columnId || columnsList[0]?.id || ""} onValueChange={(v) => updateForm("columnId", v)}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {columnsList.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={closeDialog}>Cancel</Button>
+            <Button size="sm" onClick={handleCreateTask} disabled={dialogLoading || !form.projectId || !form.title?.trim()}>
+              {dialogLoading ? "Creating..." : "Create Task"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Project */}
+      <Dialog open={activeDialog === "create_project"} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Create Project</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="proj-name">Project name</Label>
+              <Input id="proj-name" value={form.projectName || ""} onChange={(e) => updateForm("projectName", e.target.value)} placeholder="e.g. Website Redesign" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="proj-desc">Description (optional)</Label>
+              <Textarea id="proj-desc" value={form.projectDesc || ""} onChange={(e) => updateForm("projectDesc", e.target.value)} placeholder="Brief project description" className="mt-1" rows={2} />
+            </div>
+            {!selected?.client_id && (
+              <div>
+                <Label htmlFor="proj-client">Link to client (optional)</Label>
+                <Select value={form.clientId || ""} onValueChange={(v) => updateForm("clientId", v)}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select a client" /></SelectTrigger>
+                  <SelectContent>
+                    {clientsList.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={closeDialog}>Cancel</Button>
+            <Button size="sm" onClick={handleCreateProject} disabled={dialogLoading || !form.projectName?.trim()}>
+              {dialogLoading ? "Creating..." : "Create Project"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save Fact */}
+      <Dialog open={activeDialog === "save_fact"} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Save Fact to {selected?.client_name || "Client"}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="fact-key">Fact label</Label>
+              <Input id="fact-key" value={form.factKey || ""} onChange={(e) => updateForm("factKey", e.target.value)} placeholder="e.g. brand_color, preferred_format" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="fact-value">Value</Label>
+              <Textarea id="fact-value" value={form.factValue || ""} onChange={(e) => updateForm("factValue", e.target.value)} placeholder="e.g. #2D7F3A" className="mt-1" rows={2} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={closeDialog}>Cancel</Button>
+            <Button size="sm" onClick={handleSaveFact} disabled={dialogLoading || !form.factKey?.trim() || !form.factValue?.trim()}>
+              {dialogLoading ? "Saving..." : "Save Fact"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Contact */}
+      <Dialog open={activeDialog === "add_contact"} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Add Contact to {selected?.client_name || "Client"}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="contact-name">Name</Label>
+              <Input id="contact-name" value={form.contactName || ""} onChange={(e) => updateForm("contactName", e.target.value)} placeholder="Full name" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="contact-role">Role (optional)</Label>
+              <Input id="contact-role" value={form.contactRole || ""} onChange={(e) => updateForm("contactRole", e.target.value)} placeholder="e.g. Marketing Lead" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="contact-email">Email (optional)</Label>
+              <Input id="contact-email" value={form.contactEmail || ""} onChange={(e) => updateForm("contactEmail", e.target.value)} placeholder="email@example.com" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="contact-phone">Phone (optional)</Label>
+              <Input id="contact-phone" value={form.contactPhone || ""} onChange={(e) => updateForm("contactPhone", e.target.value)} placeholder="+91 98765 43210" className="mt-1" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={closeDialog}>Cancel</Button>
+            <Button size="sm" onClick={handleAddContact} disabled={dialogLoading || !form.contactName?.trim()}>
+              {dialogLoading ? "Adding..." : "Add Contact"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Set Follow-up */}
+      <Dialog open={activeDialog === "set_follow_up"} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Set Follow-up Reminder</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="followup-date">Follow-up date & time</Label>
+              <Input id="followup-date" type="datetime-local" value={form.followUpDate || ""} onChange={(e) => updateForm("followUpDate", e.target.value)} className="mt-1" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={closeDialog}>Cancel</Button>
+            <Button size="sm" onClick={handleSetFollowUp} disabled={dialogLoading || !form.followUpDate}>
+              {dialogLoading ? "Setting..." : "Set Follow-up"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link to Client */}
+      <Dialog open={activeDialog === "link_client"} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Link Conversation to Client</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="link-client">Select client</Label>
+              <Select value={form.linkClientId || ""} onValueChange={(v) => updateForm("linkClientId", v)}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Choose a client" /></SelectTrigger>
+                <SelectContent>
+                  {clientsList.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={closeDialog}>Cancel</Button>
+            <Button size="sm" onClick={handleLinkClient} disabled={dialogLoading || !form.linkClientId}>
+              {dialogLoading ? "Linking..." : "Link Client"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -267,6 +267,19 @@ export async function updateConnectorConfig(connectorId: string, updates: { mode
   return data;
 }
 
+// ─── Lightweight Column List (for comms action dialogs) ─────────────────────
+
+export async function getProjectColumns(projectId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("project_columns")
+    .select("id, name")
+    .eq("project_id", projectId)
+    .order("position");
+  if (error) throw error;
+  return data as { id: string; name: string }[];
+}
+
 // ─── Audit Log ──────────────────────────────────────────────────────────────
 
 export async function getAuditLog(opts?: { entity_type?: string; entity_id?: string; limit?: number }) {
