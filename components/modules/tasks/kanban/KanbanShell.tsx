@@ -55,19 +55,20 @@ import {
   renameProject,
   seedDefaultColumns,
 } from "@/app/(app)/tasks/actions";
+import dynamic from "next/dynamic";
 import { KanbanBoard } from "./KanbanBoard";
 import { FilterBar } from "./FilterBar";
-import { ListView } from "./ListView";
-import { CalendarView } from "./CalendarView";
-import { ClientView } from "./ClientView";
-import { StreamView } from "./StreamView";
-import { AnalyticsPanel } from "./AnalyticsPanel";
+const ListView = dynamic(() => import("./ListView").then((m) => ({ default: m.ListView })), { ssr: false });
+const CalendarView = dynamic(() => import("./CalendarView").then((m) => ({ default: m.CalendarView })), { ssr: false });
+const ClientView = dynamic(() => import("./ClientView").then((m) => ({ default: m.ClientView })), { ssr: false });
+const StreamView = dynamic(() => import("./StreamView").then((m) => ({ default: m.StreamView })), { ssr: false });
+const AnalyticsPanel = dynamic(() => import("./AnalyticsPanel").then((m) => ({ default: m.AnalyticsPanel })), { ssr: false });
+const TaskSheet = dynamic(() => import("./TaskSheet").then((m) => ({ default: m.TaskSheet })), { ssr: false });
 import { NewBoardDialog } from "../new-project-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ProjectColumn, TaskPriority, Profile, TaskFilters, ViewMode, Subtask } from "@/lib/types/tasks";
 import { DEFAULT_FILTERS, filterColumns } from "@/lib/tasks/filters";
 import { getSubtasks, setSubtasks as persistSubtasks } from "@/lib/tasks/subtasks";
-import { TaskSheet } from "./TaskSheet";
 import { toast } from "sonner";
 import { DELETE, EMPTY, SUCCESS } from "@/lib/copy";
 import type { Task } from "@/lib/types/tasks";
@@ -529,7 +530,6 @@ export function KanbanShell({
               <Dialog open={addTaskOpen} onOpenChange={setAddTaskOpen}>
                 <DialogTrigger asChild>
                   <Button
-                    variant="outline"
                     size="sm"
                     className="h-9"
                     onClick={openAddTaskDialog}

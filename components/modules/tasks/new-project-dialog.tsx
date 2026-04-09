@@ -48,7 +48,7 @@ export function NewBoardDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm">
+        <Button variant="outline" size="sm">
           <Plus className="mr-1 h-4 w-4" />
           New Board
         </Button>
