@@ -366,7 +366,7 @@ export async function getTaskDetail(taskId: string) {
   const supabase = await createClient();
 
   // Single wave — all 7 queries in parallel
-  const [taskRes, assigneesRes, membersRes, commentsRes, attachmentsRes, linksRes, tagsRes] = await Promise.all([
+  const [taskRes, assigneesRes, membersRes, commentsRes, attachmentsRes, linksRes, tagsRes, outputsRes] = await Promise.all([
     supabase.from("tasks").select("id, project_id, column_id, client_id, work_stream_id, title, description, priority, due_date, cost, position, created_by, created_from_message_id, created_from_conversation_id, created_at, updated_at, manager_id").eq("id", taskId).single(),
     supabase.from("task_assignees").select("task_id, user_id").eq("task_id", taskId),
     supabase.from("members").select("id, full_name, avatar_url, clerk_id"),
@@ -374,6 +374,7 @@ export async function getTaskDetail(taskId: string) {
     supabase.from("task_attachments").select("id, task_id, storage_path, file_name, created_at").eq("task_id", taskId).order("created_at").limit(50),
     supabase.from("task_links").select("id, task_id, url, label, created_at").eq("task_id", taskId).order("created_at").limit(50),
     supabase.from("task_tags").select("tag_id, tags(id, name, color)").eq("task_id", taskId),
+    supabase.from("task_outputs").select("id, task_id, storage_path, file_name, created_at").eq("task_id", taskId).order("created_at").limit(50),
   ]);
   if (taskRes.error) throw taskRes.error;
   const task = taskRes.data;
@@ -420,6 +421,16 @@ export async function getTaskDetail(taskId: string) {
     .map((tt: Record<string, unknown>) => tt.tags as { id: string; name: string; color: string } | null)
     .filter((t): t is { id: string; name: string; color: string } => t !== null);
 
+  // Generate signed URLs for outputs
+  const outputs = await Promise.all(
+    (outputsRes.data || []).map(async (o) => {
+      const { data: urlData } = await supabase.storage
+        .from("task-attachments")
+        .createSignedUrl(o.storage_path, 3600);
+      return { ...o, url: urlData?.signedUrl || "" };
+    })
+  );
+
   return {
     ...task,
     assignees,
@@ -428,6 +439,7 @@ export async function getTaskDetail(taskId: string) {
     attachments,
     links: linksRes.data || [],
     tags,
+    outputs,
   };
 }
 
@@ -546,6 +558,80 @@ export async function deleteAttachment(attachmentId: string) {
     .delete()
     .eq("id", attachmentId);
   if (error) throw error;
+}
+
+// ─── Outputs ──────────────────────────────────────────────────────────────────
+
+export async function uploadOutput(taskId: string, formData: FormData) {
+  const supabase = await createClient();
+  const file = formData.get("file") as File;
+  if (!file) throw new Error("No file provided");
+
+  const ext = file.name.split(".").pop();
+  const path = `outputs/${taskId}/${crypto.randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("task-attachments")
+    .upload(path, file);
+  if (uploadError) throw uploadError;
+
+  const { data, error } = await supabase
+    .from("task_outputs")
+    .insert({ task_id: taskId, storage_path: path, file_name: file.name })
+    .select()
+    .single();
+  if (error) throw error;
+
+  const { data: urlData } = await supabase.storage
+    .from("task-attachments")
+    .createSignedUrl(path, 3600);
+
+  return { ...data, url: urlData?.signedUrl || "" };
+}
+
+export async function deleteOutput(outputId: string) {
+  const supabase = await createClient();
+  const { data: out } = await supabase
+    .from("task_outputs")
+    .select("storage_path")
+    .eq("id", outputId)
+    .single();
+  if (out) {
+    await supabase.storage.from("task-attachments").remove([out.storage_path]);
+  }
+  const { error } = await supabase
+    .from("task_outputs")
+    .delete()
+    .eq("id", outputId);
+  if (error) throw error;
+}
+
+export async function getOutputsByClient(clientId: string) {
+  const supabase = await createClient();
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("id")
+    .eq("client_id", clientId);
+  if (!tasks || tasks.length === 0) return [];
+
+  const taskIds = tasks.map((t) => t.id);
+  const { data: outputs, error } = await supabase
+    .from("task_outputs")
+    .select("id, task_id, storage_path, file_name, created_at")
+    .in("task_id", taskIds)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+
+  const withUrls = await Promise.all(
+    (outputs || []).map(async (o) => {
+      const { data: urlData } = await supabase.storage
+        .from("task-attachments")
+        .createSignedUrl(o.storage_path, 3600);
+      return { ...o, url: urlData?.signedUrl || "" };
+    })
+  );
+  return withUrls;
 }
 
 // ─── Links ───────────────────────────────────────────────────────────────────

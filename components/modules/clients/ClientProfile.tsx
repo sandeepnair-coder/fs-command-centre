@@ -56,6 +56,8 @@ import {
   ShieldCheck,
   Receipt,
   CreditCard,
+  Download,
+  ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -73,6 +75,7 @@ import {
   deleteBrandAsset,
   getWorkStreams,
 } from "@/app/(app)/clients/actions";
+import { getOutputsByClient } from "@/app/(app)/tasks/actions";
 import { getAuditLog } from "@/app/(app)/comms/actions";
 import type { Client, ClientContact, ClientFact, BrandAsset, WorkStream, AuditLogEvent } from "@/lib/types/comms";
 import { VERIFICATION_CONFIG } from "@/lib/types/comms";
@@ -177,6 +180,147 @@ export function ClientProfile({ client: initial }: { client: Client }) {
     } catch {
       toast.error("Couldn't delete. Try again?");
     }
+  }
+
+  function handleDownloadMd() {
+    const lines: string[] = [];
+    const ln = (s = "") => lines.push(s);
+    const field = (label: string, val: string | null | undefined) => {
+      if (val) ln(`- **${label}:** ${val}`);
+    };
+
+    ln(`# ${client.name}`);
+    ln();
+    ln(`> Generated ${format(new Date(), "d MMM yyyy, h:mm a")}`);
+    ln();
+
+    // Overview
+    ln(`## Overview`);
+    ln();
+    field("Company", client.company_name);
+    field("Display Name", client.display_name);
+    field("Email", client.primary_email);
+    field("Website", client.website);
+    field("Phone", client.phone);
+    field("Industry", client.industry);
+    field("Business Type", client.business_type);
+    field("Timezone", client.timezone);
+    if (client.city || client.state || client.country) {
+      field("Location", [client.city, client.state, client.country].filter(Boolean).join(", "));
+    }
+    ln();
+
+    // Contacts
+    if (contacts.length > 0) {
+      ln(`## Contacts`);
+      ln();
+      contacts.forEach((c) => {
+        ln(`### ${c.name}`);
+        field("Role", c.role);
+        field("Email", c.email);
+        field("Phone", c.phone);
+        if (c.notes) field("Notes", c.notes);
+        ln();
+      });
+    }
+
+    // Brand & Web
+    const brandKeys = ["website", "instagram", "linkedin", "facebook", "twitter", "youtube", "target_audience", "tone_voice", "positioning", "brand_color_primary", "brand_color_secondary", "tagline"];
+    const brandFacts = facts.filter((f) => brandKeys.includes(f.key));
+    if (brandFacts.length > 0) {
+      ln(`## Brand & Web`);
+      ln();
+      brandFacts.forEach((f) => {
+        field(f.key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), f.value);
+      });
+      ln();
+    }
+
+    // Assets
+    if (assets.length > 0) {
+      ln(`## Assets`);
+      ln();
+      assets.forEach((a) => {
+        ln(`- **${a.file_name}** (${a.type.replace("_", " ")})${a.storage_url ? ` — ${a.storage_url}` : ""}`);
+      });
+      ln();
+    }
+
+    // Intelligence
+    const intelFacts = facts.filter((f) => !brandKeys.includes(f.key));
+    if (intelFacts.length > 0) {
+      ln(`## Intelligence`);
+      ln();
+      intelFacts.forEach((f) => {
+        const status = f.verification_status !== "verified" ? ` _(${f.verification_status})_` : "";
+        field(f.key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), f.value + status);
+      });
+      ln();
+    }
+
+    // Billing & Tax
+    if (client.billing_legal_name || client.gst_number || client.pan || client.billing_email) {
+      ln(`## Billing & Tax`);
+      ln();
+      field("Legal Entity Name", client.billing_legal_name);
+      field("Billing Name", client.billing_name);
+      field("GST / Tax ID", client.gst_number);
+      field("PAN", client.pan);
+      field("CIN", client.cin);
+      field("Billing Email", client.billing_email);
+      field("Billing Phone", client.billing_phone);
+      if (client.billing_address_line1) {
+        ln();
+        ln(`**Billing Address:**`);
+        if (client.billing_address_line1) ln(client.billing_address_line1);
+        if (client.billing_address_line2) ln(client.billing_address_line2);
+        const cityLine = [client.billing_city, client.billing_state, client.billing_postal_code].filter(Boolean).join(", ");
+        if (cityLine) ln(cityLine);
+        if (client.billing_country) ln(client.billing_country);
+      }
+      ln();
+      field("Finance Contact", client.finance_contact_name);
+      field("Finance Email", client.finance_contact_email);
+      field("Finance Phone", client.finance_contact_phone);
+      field("Payment Terms", client.payment_terms);
+      field("Currency", client.currency);
+      if (client.po_invoice_notes) {
+        ln();
+        ln(`**PO / Invoice Notes:**`);
+        ln(client.po_invoice_notes);
+      }
+      if (client.tax_notes) {
+        ln();
+        ln(`**Tax Notes:**`);
+        ln(client.tax_notes);
+      }
+      ln();
+    }
+
+    // Work Streams
+    if (streams.length > 0) {
+      ln(`## Work Streams`);
+      ln();
+      streams.forEach((s) => {
+        ln(`- ${s.name}${s.summary ? ` — ${s.summary}` : ""}`);
+      });
+      ln();
+    }
+
+    ln(`---`);
+    ln(`_Exported from Fynd Studio Command Centre_`);
+
+    const md = lines.join("\n");
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${client.name.replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "-").toLowerCase()}-client-card.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success("Client card downloaded");
   }
 
   async function handleAddContact() {
@@ -293,6 +437,14 @@ export function ClientProfile({ client: initial }: { client: Client }) {
               variant="outline"
               size="sm"
               className="h-8 text-xs"
+              onClick={handleDownloadMd}
+            >
+              <Download className="mr-1 size-3" /> Download
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
               onClick={() => { setEditForm(client); setEditing(true); }}
             >
               <Pencil className="mr-1 size-3" /> Edit
@@ -385,6 +537,7 @@ export function ClientProfile({ client: initial }: { client: Client }) {
           <TabsTrigger value="contacts" className="gap-1 text-xs"><User className="size-3" /> Contacts</TabsTrigger>
           <TabsTrigger value="brand" className="gap-1 text-xs"><Palette className="size-3" /> Brand & Web</TabsTrigger>
           <TabsTrigger value="assets" className="gap-1 text-xs"><FileText className="size-3" /> Assets</TabsTrigger>
+          <TabsTrigger value="outputs" className="gap-1 text-xs"><ImageIcon className="size-3" /> Outputs</TabsTrigger>
           <TabsTrigger value="intelligence" className="gap-1 text-xs"><Brain className="size-3" /> Intelligence</TabsTrigger>
           <TabsTrigger value="activity" className="gap-1 text-xs"><Activity className="size-3" /> Activity Log</TabsTrigger>
           <TabsTrigger value="billing" className="gap-1 text-xs"><Receipt className="size-3" /> Billing & Tax</TabsTrigger>
@@ -691,6 +844,17 @@ export function ClientProfile({ client: initial }: { client: Client }) {
             </ScrollArea>
           </TabsContent>
 
+          {/* ─── Outputs ─── */}
+          <TabsContent value="outputs" className="h-full mt-0">
+            <ScrollArea className="h-full">
+              <div className="space-y-3 pb-4">
+                <p className="text-sm font-medium">Outputs</p>
+                <p className="text-xs text-muted-foreground">Deliverables uploaded from task cards linked to this client.</p>
+                <ClientOutputsGrid clientId={client.id} />
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
           {/* ─── Activity Log ─── */}
           <TabsContent value="activity" className="h-full mt-0">
             <ScrollArea className="h-full">
@@ -876,6 +1040,40 @@ function FactCard({
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Client Outputs Grid ────────────────────────────────────────────────────
+
+function ClientOutputsGrid({ clientId }: { clientId: string }) {
+  const [outputs, setOutputs] = useState<{ id: string; file_name: string; url: string; created_at: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getOutputsByClient(clientId)
+      .then((data) => setOutputs(data))
+      .catch(() => setOutputs([]))
+      .finally(() => setLoading(false));
+  }, [clientId]);
+
+  if (loading) return <div className="grid grid-cols-3 gap-2">{[1,2,3].map((i) => <div key={i} className="h-28 rounded-lg bg-muted animate-pulse" />)}</div>;
+  if (outputs.length === 0) return <p className="text-xs text-muted-foreground/60 italic">No outputs yet. Upload outputs from task cards to see them here.</p>;
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {outputs.map((out) => (
+        <div key={out.id} className="rounded-lg border border-emerald-200 dark:border-emerald-900/40 overflow-hidden">
+          {out.url ? (
+            <a href={out.url} target="_blank" rel="noopener noreferrer">
+              <img src={out.url} alt={out.file_name} className="h-28 w-full object-cover hover:scale-105 transition-transform" />
+            </a>
+          ) : (
+            <div className="flex h-28 items-center justify-center bg-muted text-xs text-muted-foreground">{out.file_name}</div>
+          )}
+          <p className="truncate px-2 py-1 text-[10px] text-muted-foreground">{out.file_name}</p>
+        </div>
+      ))}
     </div>
   );
 }

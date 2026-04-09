@@ -55,6 +55,9 @@ import {
   Brain,
   Receipt,
   Trash2,
+  CheckSquare,
+  Square,
+  MinusSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -64,10 +67,35 @@ import {
   createClientContact,
   upsertClientFact,
   createBrandAsset,
+  deleteClient,
 } from "@/app/(app)/clients/actions";
 import type { Client, BrandAsset } from "@/lib/types/comms";
 import { toast } from "sonner";
 import { SUCCESS, EMPTY } from "@/lib/copy";
+
+function triggerEnrichment(client: { id: string; name: string; primary_email?: string | null; website?: string | null }) {
+  fetch("/api/clients/enrich", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: client.id,
+      name: client.name,
+      email: client.primary_email || undefined,
+      website: client.website || undefined,
+    }),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      if (data.enriched > 0) {
+        toast.success("Client data updated", {
+          description: `${data.enriched} intel fact${data.enriched > 1 ? "s" : ""} discovered and added.`,
+        });
+      }
+    })
+    .catch(() => {
+      // Enrichment is best-effort — don't show error
+    });
+}
 
 type ClientStat = {
   id: string;
@@ -80,6 +108,7 @@ type ClientStat = {
   updated_at: string;
   task_count: number;
   conversation_count: number;
+  thumbnail_url?: string | null;
 };
 
 // ─── Intake form shape ───────────────────────────────────────────────────────
@@ -196,10 +225,10 @@ const SECTIONS = [
 // MAIN COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
 
-export function ClientsShell() {
+export function ClientsShell({ initialClients = [] }: { initialClients?: ClientStat[] } = {}) {
   const router = useRouter();
-  const [clients, setClients] = useState<ClientStat[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [clients, setClients] = useState<ClientStat[]>(initialClients);
+  const [loading, setLoading] = useState(initialClients.length === 0);
   const [search, setSearch] = useState("");
 
   // Quick intake dialog
@@ -215,7 +244,11 @@ export function ClientsShell() {
   // Active section in advanced view
   const [activeSection, setActiveSection] = useState("basic");
 
-  useEffect(() => { loadClients(); }, []);
+  // Selection + bulk delete
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => { if (initialClients.length === 0) loadClients(); }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadClients() {
     setLoading(true);
@@ -244,7 +277,7 @@ export function ClientsShell() {
     if (!form.name.trim()) return;
     setCreating(true);
     try {
-      await createClientFull({
+      const client = await createClientFull({
         name: form.name.trim(),
         primary_email: form.primary_email.trim() || undefined,
         website: form.website.trim() || undefined,
@@ -254,6 +287,8 @@ export function ClientsShell() {
       setQuickOpen(false);
       resetForm();
       loadClients();
+      // Fire-and-forget deep research
+      triggerEnrichment(client);
     } catch {
       toast.error("Couldn't create the client. Try again?");
     } finally {
@@ -339,6 +374,8 @@ export function ClientsShell() {
       toast.success(SUCCESS.clientCreated);
       setAdvancedOpen(false);
       resetForm();
+      // Fire-and-forget deep research
+      triggerEnrichment(client);
       // Navigate to the new client profile
       router.push(`/clients/${client.id}`);
     } catch {
@@ -358,6 +395,34 @@ export function ClientsShell() {
     );
   });
 
+  const allSelected = filtered.length > 0 && filtered.every((c) => selected.has(c.id));
+  const someSelected = filtered.some((c) => selected.has(c.id));
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  }
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map((c) => c.id)));
+    }
+  }
+  async function handleBulkDelete() {
+    if (selected.size === 0) return;
+    setDeleting(true);
+    try {
+      await Promise.all([...selected].map((id) => deleteClient(id)));
+      setClients((prev) => prev.filter((c) => !selected.has(c.id)));
+      toast.success(`${selected.size} client${selected.size > 1 ? "s" : ""} deleted`);
+      setSelected(new Set());
+    } catch {
+      toast.error("Some clients couldn't be deleted.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -372,7 +437,29 @@ export function ClientsShell() {
     <div className="flex h-full flex-col">
       {/* Toolbar */}
       <div className="mb-4 flex items-center gap-3 shrink-0">
-        <div className="relative flex-1 max-w-sm">
+        <button
+          onClick={toggleSelectAll}
+          className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          aria-label={allSelected ? "Deselect all" : "Select all"}
+        >
+          {allSelected ? <CheckSquare className="size-4 text-primary" /> : someSelected ? <MinusSquare className="size-4 text-primary" /> : <Square className="size-4" />}
+          {allSelected ? "Deselect all" : "Select all"}
+        </button>
+
+        {selected.size > 0 && (
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={handleBulkDelete}
+            disabled={deleting}
+          >
+            <Trash2 className="mr-1 size-3.5" />
+            {deleting ? "Deleting..." : `Delete ${selected.size} client${selected.size > 1 ? "s" : ""}`}
+          </Button>
+        )}
+
+        <div className="relative flex-1 max-w-sm ml-auto">
           <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -767,61 +854,94 @@ export function ClientsShell() {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 pb-4">
-            {filtered.map((client) => (
-              <Link key={client.id} href={`/clients/${client.id}`} className="group">
-                <Card className="transition-colors group-hover:border-primary/50 h-full">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        {client.logo_url ? (
-                          <img
-                            src={client.logo_url}
-                            alt=""
-                            className="size-9 rounded-lg object-cover border"
-                          />
+            {filtered.map((client) => {
+              const isSelected = selected.has(client.id);
+              return (
+                <div key={client.id} className="relative group">
+                  {/* Checkbox overlay */}
+                  <button
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelect(client.id); }}
+                    className={cn(
+                      "absolute left-2 top-2 z-10 rounded p-0.5 transition-opacity",
+                      isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    )}
+                    aria-label={isSelected ? `Deselect ${client.name}` : `Select ${client.name}`}
+                  >
+                    {isSelected
+                      ? <CheckSquare className="size-4.5 text-primary" />
+                      : <Square className="size-4.5 text-muted-foreground/50 hover:text-foreground" />
+                    }
+                  </button>
+
+                  <Link href={`/clients/${client.id}`}>
+                    <Card className={cn(
+                      "transition-colors hover:border-primary/50 h-full overflow-hidden",
+                      isSelected && "border-primary/60 bg-primary/5"
+                    )}>
+                      {/* Thumbnail */}
+                      <div className="h-28 bg-muted/40 overflow-hidden">
+                        {client.thumbnail_url ? (
+                          <img src={client.thumbnail_url} alt="" className="h-full w-full object-cover" />
+                        ) : client.logo_url ? (
+                          <div className="h-full w-full flex items-center justify-center bg-muted/30">
+                            <img src={client.logo_url} alt="" className="size-14 rounded-lg object-contain" />
+                          </div>
                         ) : (
-                          <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
-                            {client.name.charAt(0).toUpperCase()}
+                          <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted/20">
+                            <span className="text-3xl font-bold text-muted-foreground/20">{client.name.charAt(0).toUpperCase()}</span>
                           </div>
                         )}
-                        <div className="min-w-0">
-                          <CardTitle className="text-sm truncate">{client.name}</CardTitle>
-                          {client.industry && (
-                            <CardDescription className="text-[11px] truncate">{client.industry}</CardDescription>
+                      </div>
+                      <CardHeader className="pb-3 pt-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {client.logo_url ? (
+                              <img src={client.logo_url} alt="" className="size-9 rounded-lg object-cover border" />
+                            ) : (
+                              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
+                                {client.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <CardTitle className="text-sm truncate">{client.name}</CardTitle>
+                              {client.industry && (
+                                <CardDescription className="text-[11px] truncate">{client.industry}</CardDescription>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {client.primary_email && (
+                            <span className="flex items-center gap-1 text-[11px] text-muted-foreground truncate">
+                              <Mail className="size-3 shrink-0" />
+                              {client.primary_email}
+                            </span>
+                          )}
+                          {client.website && (
+                            <span className="flex items-center gap-1 text-[11px] text-muted-foreground truncate">
+                              <Globe className="size-3 shrink-0" />
+                              {client.website}
+                            </span>
                           )}
                         </div>
-                      </div>
-                    </div>
 
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      {client.primary_email && (
-                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground truncate">
-                          <Mail className="size-3 shrink-0" />
-                          {client.primary_email}
-                        </span>
-                      )}
-                      {client.website && (
-                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground truncate">
-                          <Globe className="size-3 shrink-0" />
-                          {client.website}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-3 flex items-center gap-3">
-                      <Badge variant="secondary" className="text-[10px] gap-1">
-                        <ListChecks className="size-3" />
-                        {client.task_count} tasks
-                      </Badge>
-                      <Badge variant="secondary" className="text-[10px] gap-1">
-                        <MessageSquare className="size-3" />
-                        {client.conversation_count} threads
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                </Card>
-              </Link>
-            ))}
+                        <div className="mt-3 flex items-center gap-3">
+                          <Badge variant="secondary" className="text-[10px] gap-1">
+                            <ListChecks className="size-3" />
+                            {client.task_count} tasks
+                          </Badge>
+                          <Badge variant="secondary" className="text-[10px] gap-1">
+                            <MessageSquare className="size-3" />
+                            {client.conversation_count} threads
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  </Link>
+                </div>
+              );
+            })}
           </div>
         )}
       </ScrollArea>

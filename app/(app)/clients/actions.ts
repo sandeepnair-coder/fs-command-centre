@@ -359,15 +359,20 @@ export async function getClientStats() {
 
   const [clientsRes, tasksRes, convosRes] = await Promise.all([
     supabase.from("clients").select("id, name, primary_email, website, industry, logo_url, created_at, updated_at").order("name"),
-    supabase.from("tasks").select("client_id"),
+    supabase.from("tasks").select("id, client_id"),
     supabase.from("conversations").select("client_id"),
   ]);
 
   if (clientsRes.error) throw clientsRes.error;
 
   const taskCounts: Record<string, number> = {};
+  const taskIdsByClient: Record<string, string[]> = {};
   (tasksRes.data || []).forEach((t) => {
-    if (t.client_id) taskCounts[t.client_id] = (taskCounts[t.client_id] || 0) + 1;
+    if (t.client_id) {
+      taskCounts[t.client_id] = (taskCounts[t.client_id] || 0) + 1;
+      if (!taskIdsByClient[t.client_id]) taskIdsByClient[t.client_id] = [];
+      taskIdsByClient[t.client_id].push(t.id);
+    }
   });
 
   const convoCounts: Record<string, number> = {};
@@ -375,10 +380,42 @@ export async function getClientStats() {
     if (c.client_id) convoCounts[c.client_id] = (convoCounts[c.client_id] || 0) + 1;
   });
 
+  // Fetch latest output per client for thumbnail
+  const allTaskIds = (tasksRes.data || []).map((t) => t.id);
+  let outputsByTask: Record<string, { storage_path: string }> = {};
+  if (allTaskIds.length > 0) {
+    const { data: outputs } = await supabase
+      .from("task_outputs")
+      .select("task_id, storage_path")
+      .in("task_id", allTaskIds)
+      .order("created_at", { ascending: false });
+    // Keep first (latest) output per task
+    (outputs || []).forEach((o) => {
+      if (!outputsByTask[o.task_id]) outputsByTask[o.task_id] = o;
+    });
+  }
+
+  // Build thumbnail URLs per client (latest output)
+  const thumbnailUrls: Record<string, string> = {};
+  for (const [clientId, taskIds] of Object.entries(taskIdsByClient)) {
+    for (const tid of taskIds) {
+      if (outputsByTask[tid]) {
+        const { data: urlData } = await supabase.storage
+          .from("task-attachments")
+          .createSignedUrl(outputsByTask[tid].storage_path, 3600);
+        if (urlData?.signedUrl) {
+          thumbnailUrls[clientId] = urlData.signedUrl;
+          break;
+        }
+      }
+    }
+  }
+
   return (clientsRes.data || []).map((c) => ({
     ...c,
     task_count: taskCounts[c.id] || 0,
     conversation_count: convoCounts[c.id] || 0,
+    thumbnail_url: thumbnailUrls[c.id] || null,
   }));
 }
 

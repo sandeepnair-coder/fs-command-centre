@@ -71,6 +71,7 @@ import {
   Send,
   Workflow,
   GitBranch,
+  ImageIcon,
 } from "lucide-react";
 import { getAvatarColor, getInitials as getAvatarInitials } from "@/lib/utils/avatar";
 import { cn } from "@/lib/utils";
@@ -85,6 +86,8 @@ import {
   deleteComment,
   uploadAttachment,
   deleteAttachment,
+  uploadOutput,
+  deleteOutput,
   addLink,
   deleteLink,
 } from "@/app/(app)/tasks/actions";
@@ -109,6 +112,7 @@ type TaskDetail = Task & {
   comments: TaskComment[];
   attachments: TaskAttachment[];
   links: TaskLink[];
+  outputs?: TaskAttachment[];
 };
 
 function timeAgo(dateStr: string) {
@@ -362,6 +366,26 @@ export function TaskSheet({
                         ...d,
                         attachments: d.attachments.filter((a) => a.id !== attId),
                         attachments_count: Math.max(0, (d.attachments_count || 0) - 1),
+                      }))
+                    }
+                  />
+                </div>
+
+                {/* Outputs */}
+                <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-card p-4">
+                  <OutputsSection
+                    taskId={detail.id}
+                    outputs={detail.outputs || []}
+                    onAdded={(out) =>
+                      updateDetail((d) => ({
+                        ...d,
+                        outputs: [...(d.outputs || []), out],
+                      }))
+                    }
+                    onRemoved={(outId) =>
+                      updateDetail((d) => ({
+                        ...d,
+                        outputs: (d.outputs || []).filter((o) => o.id !== outId),
                       }))
                     }
                   />
@@ -955,6 +979,59 @@ function AttachmentsSection({ taskId, attachments, onAdded, onRemoved }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// OUTPUTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function OutputsSection({ taskId, outputs, onAdded, onRemoved }: {
+  taskId: string; outputs: TaskAttachment[]; onAdded: (o: TaskAttachment) => void; onRemoved: (id: string) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const fd = new FormData(); fd.set("file", file);
+        const out = await uploadOutput(taskId, fd);
+        onAdded(out);
+      }
+    } catch { toast.error("Upload didn't work — try again."); } finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <ImageIcon className="h-3 w-3" /> Outputs {outputs.length > 0 && `(${outputs.length})`}
+        </p>
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => fileRef.current?.click()} disabled={uploading}>
+          <Upload className="mr-1 h-3 w-3" /> {uploading ? "Uploading..." : "Add Output"}
+        </Button>
+        <input ref={fileRef} type="file" accept="image/*,.pdf,.ai,.psd,.fig,.sketch,.svg" multiple className="hidden" onChange={handleUpload} />
+      </div>
+      {outputs.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {outputs.map((out) => (
+            <div key={out.id} className="group relative rounded-md border border-emerald-200 dark:border-emerald-900/50 overflow-hidden">
+              {out.url ? <img src={out.url} alt={out.file_name} className="h-20 w-full object-cover" /> :
+                <div className="flex h-20 items-center justify-center bg-emerald-50 dark:bg-emerald-950/20 text-xs text-muted-foreground">{out.file_name}</div>}
+              <button onClick={async () => { try { await deleteOutput(out.id); onRemoved(out.id); } catch { toast.error("Couldn't remove that output — try again."); } }}
+                className="absolute right-1 top-1 rounded-full bg-background/80 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Trash2 className="h-3 w-3 text-destructive" />
+              </button>
+              <p className="truncate px-1 py-0.5 text-[10px] text-muted-foreground">{out.file_name}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // LINKS
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -990,12 +1067,13 @@ function LinksSection({ taskId, links, onAdded, onRemoved }: {
         </div>
       )}
       {links.map((link) => (
-        <div key={link.id} className="flex items-center justify-between py-1">
-          <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-primary hover:underline truncate">
-            <ExternalLink className="h-3 w-3 shrink-0" /> {link.label || link.url}
+        <div key={link.id} className="flex items-start gap-2 py-1.5 group">
+          <ExternalLink className="h-3 w-3 shrink-0 mt-1 text-primary" />
+          <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm text-primary hover:underline break-all">
+            {link.label || link.url}
           </a>
           <button onClick={async () => { try { await deleteLink(link.id); onRemoved(link.id); } catch { toast.error("Couldn't remove that link — try again."); } }}
-            className="text-muted-foreground/40 hover:text-destructive shrink-0"><Trash2 className="h-3.5 w-3.5" /></button>
+            className="text-muted-foreground/40 hover:text-destructive shrink-0 mt-0.5"><Trash2 className="h-3.5 w-3.5" /></button>
         </div>
       ))}
     </div>
