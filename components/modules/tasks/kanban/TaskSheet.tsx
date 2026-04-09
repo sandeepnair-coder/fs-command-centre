@@ -1156,7 +1156,7 @@ function CommentsSection({ taskId, comments, profiles, onAdded, onRemoved }: {
       {/* Comment input */}
       <div className="relative">
         <Textarea ref={textareaRef} value={body} onChange={handleChange}
-          placeholder="Say something — even a quick 'Let's do this' counts. (⌘+Enter to send)" rows={2} className="text-sm pr-12"
+          placeholder="Say something — even a quick 'Let's do this' counts. (⌘+Enter to send)" rows={2} className="text-sm pr-12 bg-muted/50 border-muted-foreground/20 focus:border-primary/50 placeholder:text-muted-foreground/50"
           onKeyDown={handleKeyDown} />
         {/* Mention dropdown */}
         {mentionQuery !== null && mentionResults.length > 0 && (
@@ -1184,7 +1184,7 @@ function CommentsSection({ taskId, comments, profiles, onAdded, onRemoved }: {
         )}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button size="icon" variant="ghost" className="absolute right-2 bottom-2 h-7 w-7"
+            <Button size="icon" variant="ghost" className="absolute right-2 bottom-2 h-7 w-7 text-primary hover:text-primary"
               onClick={handleSubmit} disabled={submitting || !body.trim()}>
               <Send className="h-3.5 w-3.5" />
             </Button>
