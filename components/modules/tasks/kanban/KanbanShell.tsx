@@ -219,10 +219,14 @@ export function KanbanShell({
     setNewTaskDueDate("");
     setNewTaskClientId("__none__");
     setAddTaskOpen(true);
-    // Refresh clients so newly added ones appear in the dropdown
+    // Refresh clients and profiles so newly added ones appear in dropdowns
     try {
-      const freshClients = await getClients();
+      const [freshClients, freshProfiles] = await Promise.all([
+        getClients(),
+        getProfiles(),
+      ]);
       if (freshClients) setClients(freshClients);
+      if (freshProfiles) setProfiles(freshProfiles);
     } catch {}
   }
 
