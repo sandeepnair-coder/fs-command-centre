@@ -10,6 +10,8 @@ import {
   Activity,
   CheckCircle,
   IndianRupee,
+  Users,
+  Building2,
 } from "lucide-react";
 import {
   BarChart,
@@ -171,6 +173,64 @@ export function AnalyticsPanel({
     [columns]
   );
 
+  // ─── Member Workload ───────────────────────────────────────────────────────
+
+  const memberWorkload = useMemo(() => {
+    const map: Record<string, { name: string; total: number; done: number; overdue: number; avatar_url: string | null }> = {};
+    const doneColIds = new Set(
+      columns
+        .filter((c) => c.name.toLowerCase().includes("done") || c.name.toLowerCase().includes("approved"))
+        .map((c) => c.id)
+    );
+    const today = startOfDay(new Date());
+
+    allTasks.forEach((t) => {
+      (t.assignees || []).forEach((a) => {
+        const name = a.profiles?.full_name || "Unknown";
+        if (!map[a.user_id]) {
+          map[a.user_id] = { name, total: 0, done: 0, overdue: 0, avatar_url: a.profiles?.avatar_url || null };
+        }
+        map[a.user_id].total++;
+        if (doneColIds.has(t.column_id)) map[a.user_id].done++;
+        if (t.due_date && isPast(startOfDay(new Date(t.due_date))) && !isToday(startOfDay(new Date(t.due_date))) && !doneColIds.has(t.column_id)) {
+          map[a.user_id].overdue++;
+        }
+      });
+    });
+
+    return Object.values(map).sort((a, b) => b.total - a.total);
+  }, [allTasks, columns]);
+
+  const memberChartData = useMemo(
+    () => memberWorkload.map((m) => ({
+      name: m.name.length > 14 ? m.name.slice(0, 13) + "…" : m.name,
+      Active: m.total - m.done,
+      Done: m.done,
+    })),
+    [memberWorkload]
+  );
+
+  // Unassigned tasks
+  const unassignedTasks = useMemo(
+    () => allTasks.filter((t) => !t.assignees || t.assignees.length === 0).length,
+    [allTasks]
+  );
+
+  // ─── Tasks by Client ──────────────────────────────────────────────────────
+
+  const clientDistribution = useMemo(() => {
+    const map: Record<string, { name: string; count: number }> = {};
+    allTasks.forEach((t) => {
+      const name = t.client_name || "No Client";
+      const key = t.client_id || "__none__";
+      if (!map[key]) map[key] = { name, count: 0 };
+      map[key].count++;
+    });
+    return Object.values(map)
+      .sort((a, b) => b.count - a.count)
+      .map((d, i) => ({ ...d, fill: STATUS_COLORS[i % STATUS_COLORS.length] }));
+  }, [allTasks]);
+
   // ─── Stat Card Component ────────────────────────────────────────────────────
 
   const StatCard = ({
@@ -208,12 +268,14 @@ export function AnalyticsPanel({
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         <StatCard icon={ListTodo} label="Total Tasks" value={totalTasks} color="bg-primary/10 text-primary" />
         <StatCard icon={AlertTriangle} label="Overdue" value={overdueTasks} color="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" />
         <StatCard icon={Activity} label="In Progress" value={inProgressTasks} color="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
         <StatCard icon={CheckCircle} label="Completion" value={`${completionRate}%`} color="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" />
         <StatCard icon={IndianRupee} label="Total Budget" value={`₹${totalBudget.toLocaleString("en-IN")}`} color="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" />
+        <StatCard icon={Users} label="Unassigned" value={unassignedTasks} color="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
+        <StatCard icon={Building2} label="Clients" value={clientDistribution.length} color="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
       </div>
 
       {/* Charts */}
@@ -344,6 +406,109 @@ export function AnalyticsPanel({
           </ResponsiveContainer>
         </CardContent>
       </Card>
+
+      {/* ─── Team & Client Section ───────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Member Workload */}
+        {memberChartData.length > 0 && (
+          <Card className="shadow-none">
+            <CardHeader className="p-3 pb-0">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Workload by Member</CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 h-[220px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={memberChartData} layout="vertical" margin={{ left: 0, right: 8, top: 4, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={100} />
+                  <RechartsTooltip contentStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="Active" stackId="a" fill="#38bdf8" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Done" stackId="a" fill="#22c55e" radius={[0, 4, 4, 0]} />
+                  <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Tasks by Client */}
+        {clientDistribution.length > 0 && (
+          <Card className="shadow-none">
+            <CardHeader className="p-3 pb-0">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Tasks by Client</CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 h-[220px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={clientDistribution} layout="vertical" margin={{ left: 0, right: 8, top: 4, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={100} />
+                  <RechartsTooltip contentStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                    {clientDistribution.map((entry, i) => (
+                      <Cell key={i} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* ─── Member Detail Table ─────────────────────────────────────────────── */}
+      {memberWorkload.length > 0 && (
+        <Card className="shadow-none">
+          <CardHeader className="p-3 pb-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Team Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent className="p-3">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-[11px] text-muted-foreground uppercase tracking-wider">
+                    <th className="pb-2 font-medium">Member</th>
+                    <th className="pb-2 font-medium text-right tabular-nums">Total</th>
+                    <th className="pb-2 font-medium text-right tabular-nums">Done</th>
+                    <th className="pb-2 font-medium text-right tabular-nums">Active</th>
+                    <th className="pb-2 font-medium text-right tabular-nums">Overdue</th>
+                    <th className="pb-2 font-medium text-right tabular-nums">Completion</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {memberWorkload.map((m) => (
+                    <tr key={m.name} className="border-b last:border-0">
+                      <td className="py-2 flex items-center gap-2">
+                        {m.avatar_url ? (
+                          <img src={m.avatar_url} alt="" className="size-5 rounded-full object-cover" />
+                        ) : (
+                          <div className="size-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium">
+                            {m.name.charAt(0)}
+                          </div>
+                        )}
+                        <span className="truncate max-w-[140px]">{m.name}</span>
+                      </td>
+                      <td className="py-2 text-right tabular-nums font-medium">{m.total}</td>
+                      <td className="py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{m.done}</td>
+                      <td className="py-2 text-right tabular-nums text-blue-600 dark:text-blue-400">{m.total - m.done}</td>
+                      <td className="py-2 text-right tabular-nums">
+                        {m.overdue > 0 ? (
+                          <span className="text-red-600 dark:text-red-400">{m.overdue}</span>
+                        ) : (
+                          <span className="text-muted-foreground">0</span>
+                        )}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">
+                        {m.total > 0 ? `${Math.round((m.done / m.total) * 100)}%` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
