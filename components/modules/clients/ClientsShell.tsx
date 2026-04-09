@@ -875,30 +875,18 @@ export function ClientsShell({ initialClients = [] }: { initialClients?: ClientS
 
                   <Link href={`/clients/${client.id}`}>
                     <Card className={cn(
-                      "transition-colors hover:border-primary/50 h-full overflow-hidden",
+                      "transition-colors hover:border-primary/50 h-full",
                       isSelected && "border-primary/60 bg-primary/5"
                     )}>
-                      {/* Thumbnail */}
-                      <div className="h-28 bg-muted/40 overflow-hidden">
-                        {client.thumbnail_url ? (
-                          <img src={client.thumbnail_url} alt="" className="h-full w-full object-cover" />
-                        ) : client.logo_url ? (
-                          <div className="h-full w-full flex items-center justify-center bg-muted/30">
-                            <img src={client.logo_url} alt="" className="size-14 rounded-lg object-contain" />
-                          </div>
-                        ) : (
-                          <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted/20">
-                            <span className="text-3xl font-bold text-muted-foreground/20">{client.name.charAt(0).toUpperCase()}</span>
-                          </div>
-                        )}
-                      </div>
-                      <CardHeader className="pb-3 pt-3">
+                      <CardHeader className="pb-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2.5 min-w-0">
-                            {client.logo_url ? (
-                              <img src={client.logo_url} alt="" className="size-9 rounded-lg object-cover border" />
+                            {client.thumbnail_url ? (
+                              <img src={client.thumbnail_url} alt="" className="size-9 rounded-full object-cover border" />
+                            ) : client.logo_url ? (
+                              <img src={client.logo_url} alt="" className="size-9 rounded-full object-cover border" />
                             ) : (
-                              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
+                              <div className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary shrink-0">
                                 {client.name.charAt(0).toUpperCase()}
                               </div>
                             )}
