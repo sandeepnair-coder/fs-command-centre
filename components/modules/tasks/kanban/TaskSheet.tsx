@@ -63,6 +63,7 @@ import {
   Calendar,
   IndianRupee,
   User,
+  UserCog,
   Flag,
   Columns3,
   Briefcase,
@@ -426,10 +427,14 @@ export function TaskSheet({
             {/* ─── RIGHT: SIDEBAR (sticky) ─── */}
             <ScrollArea className="w-[300px] lg:w-[320px] shrink-0 border-l">
               <div className="p-3 space-y-3">
-                {/* Group 1: Assignee, Status, Priority */}
+                {/* Group 1: Assignee, Manager, Status, Priority */}
                 <div className="rounded-xl border bg-card p-1">
                 <SidebarField icon={User} label="Assignee">
                   <AssigneeField task={detail} profiles={profiles} onChanged={handleFieldChange} />
+                </SidebarField>
+
+                <SidebarField icon={UserCog} label="Manager">
+                  <ManagerField task={detail} profiles={profiles} onChanged={handleFieldChange} />
                 </SidebarField>
 
                 <SidebarField icon={Columns3} label="Status">
@@ -679,6 +684,103 @@ function AssigneeField({
           <DropdownMenuContent align="start">
             {available.map((p) => (
               <DropdownMenuItem key={p.id} onClick={() => handleAdd(p)}>
+                <Avatar className="h-5 w-5 mr-2">
+                  <AvatarFallback className={cn("text-[8px]", getAvatarColor(p.full_name).bg, getAvatarColor(p.full_name).text)}>
+                    {getAvatarInitials(p.full_name || "?")}
+                  </AvatarFallback>
+                </Avatar>
+                {p.full_name || "Unnamed"}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MANAGER FIELD (single-select)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ManagerField({
+  task,
+  profiles,
+  onChanged,
+}: {
+  task: Task;
+  profiles: Profile[];
+  onChanged: (updates: Partial<Task>) => void;
+}) {
+  const currentManager = task.manager_id
+    ? profiles.find((p) => p.id === task.manager_id)
+    : null;
+
+  async function handleSelect(profile: Profile) {
+    onChanged({ manager_id: profile.id, manager_name: profile.full_name });
+    try {
+      await updateTask(task.id, { manager_id: profile.id });
+    } catch {
+      toast.error("Manager didn't save — try again.");
+    }
+  }
+
+  async function handleRemove() {
+    onChanged({ manager_id: null, manager_name: null });
+    try {
+      await updateTask(task.id, { manager_id: null });
+    } catch {
+      toast.error("Couldn't remove manager — try again.");
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {currentManager ? (
+        <div className="flex items-center gap-1.5 rounded-full bg-background border px-2 py-0.5 text-xs">
+          <Avatar className="h-4 w-4">
+            {currentManager.avatar_url && <AvatarImage src={currentManager.avatar_url} />}
+            <AvatarFallback className={cn("text-[7px] font-semibold", getAvatarColor(currentManager.full_name, currentManager.avatar_color).bg, getAvatarColor(currentManager.full_name, currentManager.avatar_color).text)}>
+              {getAvatarInitials(currentManager.full_name)}
+            </AvatarFallback>
+          </Avatar>
+          <span className="max-w-[70px] truncate">{currentManager.full_name}</span>
+          <button onClick={handleRemove} className="text-muted-foreground hover:text-foreground">
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      ) : (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground">
+              <Plus className="h-3 w-3 mr-1" />
+              Assign manager
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {profiles.map((p) => (
+              <DropdownMenuItem key={p.id} onClick={() => handleSelect(p)}>
+                <Avatar className="h-5 w-5 mr-2">
+                  <AvatarFallback className={cn("text-[8px]", getAvatarColor(p.full_name).bg, getAvatarColor(p.full_name).text)}>
+                    {getAvatarInitials(p.full_name || "?")}
+                  </AvatarFallback>
+                </Avatar>
+                {p.full_name || "Unnamed"}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      {currentManager && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground">
+              Change
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {profiles.filter((p) => p.id !== task.manager_id).map((p) => (
+              <DropdownMenuItem key={p.id} onClick={() => handleSelect(p)}>
                 <Avatar className="h-5 w-5 mr-2">
                   <AvatarFallback className={cn("text-[8px]", getAvatarColor(p.full_name).bg, getAvatarColor(p.full_name).text)}>
                     {getAvatarInitials(p.full_name || "?")}
@@ -970,7 +1072,7 @@ function CommentsSection({ taskId, comments, profiles, onAdded, onRemoved }: {
   return (
     <div className="space-y-4">
       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-        <MessageSquare className="h-3 w-3" /> Activity {comments.length > 0 && `(${comments.length})`}
+        <MessageSquare className="h-3 w-3" /> Comments {comments.length > 0 && `(${comments.length})`}
       </p>
 
       {/* Comment input */}
