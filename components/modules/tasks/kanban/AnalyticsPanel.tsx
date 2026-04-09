@@ -258,7 +258,7 @@ export function AnalyticsPanel({
   );
 
   return (
-    <div className="border rounded-xl bg-card/50 p-4 mb-3 space-y-4 animate-in slide-in-from-top-2 duration-300">
+    <div className="border rounded-xl bg-card/50 p-4 mb-3 space-y-4 animate-in slide-in-from-top-2 duration-300 overflow-y-auto max-h-[calc(100vh-220px)]">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">Board Analytics</h3>
