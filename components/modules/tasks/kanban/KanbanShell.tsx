@@ -214,7 +214,7 @@ export function KanbanShell({
 
   // ─── Reset Add Task dialog defaults when dialog opens ─────────────────
 
-  function openAddTaskDialog() {
+  async function openAddTaskDialog() {
     setNewTaskTitle("");
     setNewTaskColumnId(columns.length > 0 ? columns[0].id : "");
     setNewTaskPriority("low");
@@ -222,6 +222,11 @@ export function KanbanShell({
     setNewTaskDueDate("");
     setNewTaskClientId("__none__");
     setAddTaskOpen(true);
+    // Refresh clients so newly added ones appear in the dropdown
+    try {
+      const freshClients = await getClients();
+      if (freshClients) setClients(freshClients);
+    } catch {}
   }
 
   // ─── Handlers ─────────────────────────────────────────────────────────
