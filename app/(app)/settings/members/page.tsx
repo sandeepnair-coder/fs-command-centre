@@ -48,8 +48,9 @@ import {
   Eye,
   UserX,
   Trash2,
+  ShieldCheck,
 } from "lucide-react";
-import { getMembers, inviteMember, changeMemberRole, toggleMemberStatus, removeMember } from "./actions";
+import { getMembers, inviteMember, changeMemberRole, toggleMemberStatus, toggleManager, removeMember } from "./actions";
 import type { Member, MemberRole } from "@/lib/types/members";
 import { ROLE_CONFIG } from "@/lib/types/members";
 import { getInitials } from "@/lib/utils/avatar";
@@ -131,6 +132,18 @@ export default function MembersPage() {
     }
   }
 
+  async function handleToggleManager(memberId: string) {
+    try {
+      const newValue = await toggleManager(memberId);
+      setMembers((prev) =>
+        prev.map((m) => (m.id === memberId ? { ...m, is_manager: newValue } : m))
+      );
+      toast.success(newValue ? "Marked as manager." : "Manager access removed.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't update manager status.");
+    }
+  }
+
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       <div className="mb-4">
@@ -170,6 +183,7 @@ export default function MembersPage() {
               <TableRow>
                 <TableHead>Member</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>Manager</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
@@ -205,6 +219,15 @@ export default function MembersPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
+                      {m.role === "owner" || m.is_manager ? (
+                        <Badge variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          Manager
+                        </Badge>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <Badge variant={m.status === "active" ? "default" : "outline"}
                         className={cn("text-[10px]",
                           m.status === "active" && "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
@@ -231,6 +254,11 @@ export default function MembersPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleRoleChange(m.id, "viewer")}>
                               <Eye className="mr-2 h-3.5 w-3.5" /> Make Viewer
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleToggleManager(m.id)}>
+                              <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                              {m.is_manager ? "Remove Manager" : "Make Manager"}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => handleToggleStatus(m.id)}>

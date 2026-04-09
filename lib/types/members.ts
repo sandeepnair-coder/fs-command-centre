@@ -12,6 +12,7 @@ export type Member = {
   clerk_id?: string | null;
   full_name?: string | null;
   avatar_url?: string | null;
+  is_manager?: boolean;
   profiles?: { full_name: string; avatar_url: string | null } | null;
 };
 

@@ -16,7 +16,7 @@ export async function getCurrentMember(): Promise<Member | null> {
   // Check if member exists by clerk_id
   const { data: existing } = await supabase
     .from("members")
-    .select("id, email, role, status, clerk_id, full_name, avatar_url, created_at")
+    .select("id, email, role, status, clerk_id, full_name, avatar_url, is_manager, created_at")
     .eq("clerk_id", userId)
     .single();
 
@@ -54,7 +54,7 @@ export async function getCurrentMember(): Promise<Member | null> {
     // May already exist by email — try to link
     const { data: byEmail } = await supabase
       .from("members")
-      .select("id, email, role, status, clerk_id, full_name, avatar_url, created_at")
+      .select("id, email, role, status, clerk_id, full_name, avatar_url, is_manager, created_at")
       .eq("email", email)
       .single();
 

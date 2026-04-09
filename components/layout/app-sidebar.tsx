@@ -24,12 +24,13 @@ type NavItem = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   minRole?: MemberRole[]; // roles that can see this item
+  requireManager?: boolean; // only visible to managers
 };
 
 const navItems: NavItem[] = [
   { href: "/tasks", label: "Task Management", icon: ListChecks },
   { href: "/finance", label: "Finance", icon: DollarSign, minRole: ["owner", "admin", "member"] },
-  { href: "/comms", label: "Comms", icon: MessageSquareText, minRole: ["owner", "admin", "member"] },
+  { href: "/comms", label: "Comms", icon: MessageSquareText, minRole: ["owner", "admin", "member"], requireManager: true },
   { href: "/clients", label: "Clients", icon: Users, minRole: ["owner", "admin", "member"] },
 ];
 
@@ -74,15 +75,17 @@ function NavLink({
   );
 }
 
-export function AppSidebar({ role = "member" }: { role?: MemberRole }) {
+export function AppSidebar({ role = "member", isManager = false }: { role?: MemberRole; isManager?: boolean }) {
   const pathname = usePathname();
 
   const visibleItems = navItems.filter(
-    (item) => !item.minRole || item.minRole.includes(role)
+    (item) =>
+      (!item.minRole || item.minRole.includes(role)) &&
+      (!item.requireManager || isManager)
   );
 
   return (
-    <aside className="flex h-full w-56 flex-col border-r bg-card">
+    <aside className="flex h-full w-56 flex-col border-r bg-sidebar">
       {/* Brand header */}
       <div className="flex h-14 items-center px-5">
         <Link

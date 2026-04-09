@@ -8,7 +8,7 @@ export async function getMembers(): Promise<Member[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("members")
-    .select("id, email, role, status, clerk_id, full_name, avatar_url, created_at")
+    .select("id, email, role, status, clerk_id, full_name, avatar_url, is_manager, created_at")
     .order("created_at");
   if (error) throw error;
   return (data || []) as Member[];
@@ -102,6 +102,32 @@ export async function toggleMemberStatus(memberId: string) {
 
   if (error) throw error;
   return newStatus;
+}
+
+export async function toggleManager(memberId: string) {
+  const current = await getCurrentMember();
+  if (!current || (current.role !== "owner" && current.role !== "admin")) {
+    throw new Error("Only owners and admins can change manager status");
+  }
+
+  const supabase = await createClient();
+  const { data: target } = await supabase
+    .from("members")
+    .select("is_manager, role")
+    .eq("id", memberId)
+    .single();
+
+  if (!target) throw new Error("Member not found");
+  if (target.role === "owner") throw new Error("Owner is always a manager");
+
+  const newValue = !target.is_manager;
+  const { error } = await supabase
+    .from("members")
+    .update({ is_manager: newValue })
+    .eq("id", memberId);
+
+  if (error) throw error;
+  return newValue;
 }
 
 export async function removeMember(memberId: string) {
