@@ -451,7 +451,7 @@ export async function getProfiles() {
   // Get active members — use members table directly (Clerk-based)
   const { data: members, error } = await supabase
     .from("members")
-    .select("id, full_name, avatar_url, clerk_id, email")
+    .select("id, full_name, avatar_url, clerk_id, email, is_manager, role")
     .eq("status", "active")
     .order("full_name");
   if (error) throw error;
@@ -463,6 +463,7 @@ export async function getProfiles() {
     full_name: m.full_name || m.email?.split("@")[0] || "Unknown",
     avatar_url: m.avatar_url || null,
     avatar_color: null,
+    is_manager: m.is_manager || m.role === "owner",
   }));
 }
 

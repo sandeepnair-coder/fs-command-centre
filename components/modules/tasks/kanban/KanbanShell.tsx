@@ -673,7 +673,7 @@ export function KanbanShell({
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__none__" disabled>Select manager</SelectItem>
-                            {profiles.map((p) => (
+                            {profiles.filter((p) => p.is_manager).map((p) => (
                               <SelectItem key={p.id} value={p.id}>
                                 {p.full_name || "Unnamed"}
                               </SelectItem>

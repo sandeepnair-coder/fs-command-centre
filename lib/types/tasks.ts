@@ -77,6 +77,7 @@ export type Profile = {
   full_name: string;
   avatar_url: string | null;
   avatar_color: string | null;
+  is_manager?: boolean;
 };
 
 // ─── Tags ────────────────────────────────────────────────────────────────────
