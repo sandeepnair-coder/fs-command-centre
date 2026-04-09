@@ -750,14 +750,6 @@ export function KanbanShell({
         </div>
       ) : (
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          {/* Analytics Panel */}
-          {showAnalytics && (
-            <AnalyticsPanel
-              columns={columns}
-              onClose={() => setShowAnalytics(false)}
-            />
-          )}
-
           {/* Filter Bar */}
           <FilterBar
             filters={filters}
@@ -768,6 +760,14 @@ export function KanbanShell({
             clients={clients}
             columns={columns}
           />
+
+          {/* Analytics Panel */}
+          {showAnalytics && (
+            <AnalyticsPanel
+              columns={filteredColumns}
+              onClose={() => setShowAnalytics(false)}
+            />
+          )}
 
           {/* View Renderer */}
           {viewMode === "kanban" && (
