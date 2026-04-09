@@ -334,53 +334,8 @@ export function KanbanColumn({
         </div>
       </CardContent>
 
-      {/* ─── Footer ─── */}
-      <div className="px-2 pb-2">
-        {addingTask ? (
-          <div className="space-y-1.5">
-            <Input
-              value={taskTitle}
-              onChange={(e) => setTaskTitle(e.target.value)}
-              placeholder="What needs doing?"
-              className="h-8 text-sm"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleAddTask();
-                if (e.key === "Escape") {
-                  setAddingTask(false);
-                  setTaskTitle("");
-                }
-              }}
-            />
-            <div className="flex gap-1.5">
-              <Button size="sm" className="h-7" onClick={handleAddTask}>
-                Add
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7"
-                onClick={() => {
-                  setAddingTask(false);
-                  setTaskTitle("");
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full h-7 justify-start text-muted-foreground"
-            onClick={() => setAddingTask(true)}
-          >
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            Add card
-          </Button>
-        )}
-      </div>
+      {/* Spacer */}
+      <div className="pb-1" />
     </Card>
   );
 }
