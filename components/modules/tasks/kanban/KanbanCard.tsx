@@ -116,7 +116,7 @@ export function KanbanCard({
       {...(overlay ? {} : listeners)}
       onClick={onClick}
       className={cn(
-        "cursor-pointer rounded-lg border border-border/60 bg-card p-3 shadow-md transition-shadow hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+        "cursor-pointer rounded-lg border border-border/60 bg-card p-3 shadow-md transition-shadow hover:shadow-lg dark:shadow-black/40 dark:hover:shadow-black/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
         deadlineBorderStyles[deadlineStatus],
         isCompleted && "opacity-60"
       )}
