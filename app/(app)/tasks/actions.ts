@@ -283,7 +283,7 @@ export async function createTask(
   projectId: string,
   columnId: string,
   title: string,
-  opts: { priority?: TaskPriority; due_date?: string | null; client_id: string }
+  opts: { priority?: TaskPriority; due_date?: string | null; client_id: string; manager_id?: string | null }
 ) {
   const supabase = await createClient();
 
@@ -307,6 +307,7 @@ export async function createTask(
       position: nextPos,
       created_by: member?.id ?? null,
       client_id: opts.client_id,
+      manager_id: opts.manager_id || null,
       ...(opts.priority ? { priority: opts.priority } : {}),
       ...(opts.due_date ? { due_date: opts.due_date } : {}),
     })

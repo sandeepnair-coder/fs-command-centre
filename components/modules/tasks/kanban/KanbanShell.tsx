@@ -116,6 +116,7 @@ export function KanbanShell({
   const [newTaskAssigneeId, setNewTaskAssigneeId] = useState<string>("__none__");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [newTaskClientId, setNewTaskClientId] = useState<string>("__none__");
+  const [newTaskManagerId, setNewTaskManagerId] = useState<string>("__none__");
   const [newTaskCreating, setNewTaskCreating] = useState(false);
 
   // ─── New feature state ──────────────────────────────────────────────────
@@ -218,6 +219,7 @@ export function KanbanShell({
     setNewTaskAssigneeId("__none__");
     setNewTaskDueDate("");
     setNewTaskClientId("__none__");
+    setNewTaskManagerId("__none__");
     setAddTaskOpen(true);
     // Refresh clients and profiles so newly added ones appear in dropdowns
     try {
@@ -324,10 +326,12 @@ export function KanbanShell({
         return;
       }
 
+      const resolvedManagerId = newTaskManagerId !== "__none__" ? newTaskManagerId : null;
       const task = await createTask(selectedProjectId, newTaskColumnId, trimmed, {
         priority: newTaskPriority,
         due_date: newTaskDueDate || null,
         client_id: resolvedClientId,
+        manager_id: resolvedManagerId,
       });
 
       // Add assignee if selected
@@ -657,8 +661,29 @@ export function KanbanShell({
                         </Select>
                       </div>
 
+                      {/* Manager */}
+                      <div className="space-y-1.5">
+                        <Label className="text-sm">Manager <span className="text-destructive">*</span></Label>
+                        <Select
+                          value={newTaskManagerId}
+                          onValueChange={setNewTaskManagerId}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Select manager" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__" disabled>Select manager</SelectItem>
+                            {profiles.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.full_name || "Unnamed"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
                       {/* Due Date */}
-                      <div className="space-y-1.5 col-span-2">
+                      <div className="space-y-1.5">
                         <Label className="text-sm">Due Date</Label>
                         <Input
                           type="date"
@@ -678,7 +703,7 @@ export function KanbanShell({
                     <Button
                       size="sm"
                       onClick={handleAddTask}
-                      disabled={newTaskCreating || !newTaskTitle.trim() || newTaskClientId === "__none__"}
+                      disabled={newTaskCreating || !newTaskTitle.trim() || newTaskClientId === "__none__" || newTaskManagerId === "__none__"}
                     >
                       {newTaskCreating ? "Creating..." : "Create Task"}
                     </Button>
