@@ -68,7 +68,6 @@ import { NewBoardDialog } from "../new-project-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ProjectColumn, TaskPriority, Profile, TaskFilters, ViewMode, Subtask } from "@/lib/types/tasks";
 import { DEFAULT_FILTERS, filterColumns } from "@/lib/tasks/filters";
-import { getSubtasks, setSubtasks as persistSubtasks } from "@/lib/tasks/subtasks";
 import { toast } from "sonner";
 import { DELETE, EMPTY, SUCCESS } from "@/lib/copy";
 import type { Task } from "@/lib/types/tasks";
@@ -173,12 +172,11 @@ export function KanbanShell({
       const data = await getColumns(projectId);
       setColumns(data);
 
-      // Load subtasks from localStorage for all tasks
+      // Build subtasksMap from DB data (subtasks are now on each task)
       const sMap: Record<string, Subtask[]> = {};
       data.forEach((col: ProjectColumn) => {
-        (col.tasks || []).forEach((t: { id: string }) => {
-          const subs = getSubtasks(t.id);
-          if (subs.length > 0) sMap[t.id] = subs;
+        (col.tasks || []).forEach((t) => {
+          if (t.subtasks && t.subtasks.length > 0) sMap[t.id] = t.subtasks;
         });
       });
       setSubtasksMap(sMap);
@@ -201,7 +199,6 @@ export function KanbanShell({
   // ─── Subtask handler ──────────────────────────────────────────────────
 
   const handleSubtasksChange = useCallback((taskId: string, subtasks: Subtask[]) => {
-    persistSubtasks(taskId, subtasks);
     setSubtasksMap((prev) => ({ ...prev, [taskId]: subtasks }));
   }, []);
 

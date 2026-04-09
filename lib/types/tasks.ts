@@ -28,13 +28,16 @@ export type Task = {
   created_from_conversation_id: string | null;
   created_at: string;
   updated_at: string;
+  manager_id: string | null;
   assignees?: TaskAssignee[];
   client_name?: string | null;
+  manager_name?: string | null;
   work_stream_name?: string | null;
   comments_count?: number;
   attachments_count?: number;
   links_count?: number;
   relations_count?: number;
+  subtasks?: Subtask[];
 };
 
 export type TaskAssignee = {
@@ -144,6 +147,7 @@ export type TaskFilters = {
   search: string;
   priority: TaskPriority | "all";
   assignee: string | "all";
+  manager: string | "all";
   dueDate: "all" | "overdue" | "this_week" | "this_month" | "no_date";
   client: string | "all";
 };

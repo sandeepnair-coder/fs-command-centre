@@ -116,7 +116,7 @@ export async function getColumns(projectId: string) {
       .order("position"),
     supabase
       .from("tasks")
-      .select("id, project_id, column_id, client_id, work_stream_id, title, description, priority, due_date, cost, position, created_by, created_from_message_id, created_from_conversation_id, created_at, updated_at")
+      .select("id, project_id, column_id, client_id, work_stream_id, title, description, priority, due_date, cost, position, created_by, created_from_message_id, created_from_conversation_id, created_at, updated_at, manager_id")
       .eq("project_id", projectId)
       .order("position"),
     supabase
@@ -157,7 +157,7 @@ export async function getColumns(projectId: string) {
   const taskIds = tasks.map((t) => t.id);
 
   // Second wave — clients, work streams + all counts in parallel
-  const [clientsRes, workStreamsRes, commentsRes, attachmentsRes, linksRes, relationsRes] = await Promise.all([
+  const [clientsRes, workStreamsRes, commentsRes, attachmentsRes, linksRes, relationsRes, subtasksRes] = await Promise.all([
     clientIds.length > 0
       ? supabase.from("clients").select("id, name").in("id", clientIds)
       : { data: [] as { id: string; name: string }[] },
@@ -176,6 +176,9 @@ export async function getColumns(projectId: string) {
     taskIds.length > 0
       ? supabase.from("card_relations").select("from_card_id, to_card_id").or(`from_card_id.in.(${taskIds.join(",")}),to_card_id.in.(${taskIds.join(",")})`)
       : { data: [] as { from_card_id: string; to_card_id: string }[] },
+    taskIds.length > 0
+      ? supabase.from("subtasks").select("id, task_id, title, completed, position").in("task_id", taskIds).order("position")
+      : { data: [] as { id: string; task_id: string; title: string; completed: boolean; position: number }[] },
   ]);
 
   const clientMap: Record<string, string> = {};
@@ -209,6 +212,13 @@ export async function getColumns(projectId: string) {
     relationCounts[r.to_card_id] = (relationCounts[r.to_card_id] || 0) + 1;
   });
 
+  // Group subtasks by task
+  const subtasksByTask: Record<string, { id: string; title: string; completed: boolean }[]> = {};
+  ((subtasksRes as { data: { id: string; task_id: string; title: string; completed: boolean; position: number }[] }).data || []).forEach((s) => {
+    if (!subtasksByTask[s.task_id]) subtasksByTask[s.task_id] = [];
+    subtasksByTask[s.task_id].push({ id: s.id, title: s.title, completed: s.completed });
+  });
+
   // Nest tasks under columns
   return columns.map((col) => ({
     ...col,
@@ -218,11 +228,13 @@ export async function getColumns(projectId: string) {
         ...t,
         assignees: taskAssignees[t.id] || [],
         client_name: t.client_id ? clientMap[t.client_id] ?? null : null,
+        manager_name: t.manager_id ? memberMap[t.manager_id]?.full_name ?? null : null,
         work_stream_name: t.work_stream_id ? workStreamMap[t.work_stream_id] ?? null : null,
         comments_count: commentCounts[t.id] || 0,
         attachments_count: attachmentCounts[t.id] || 0,
         links_count: linkCounts[t.id] || 0,
         relations_count: relationCounts[t.id] || 0,
+        subtasks: subtasksByTask[t.id] || [],
       })),
   }));
 }
@@ -314,6 +326,7 @@ export async function updateTask(
     column_id?: string;
     cost?: number | null;
     client_id?: string | null;
+    manager_id?: string | null;
   }
 ) {
   const supabase = await createClient();
@@ -354,7 +367,7 @@ export async function getTaskDetail(taskId: string) {
 
   // Single wave — all 7 queries in parallel
   const [taskRes, assigneesRes, membersRes, commentsRes, attachmentsRes, linksRes, tagsRes] = await Promise.all([
-    supabase.from("tasks").select("id, project_id, column_id, client_id, work_stream_id, title, description, priority, due_date, cost, position, created_by, created_from_message_id, created_from_conversation_id, created_at, updated_at").eq("id", taskId).single(),
+    supabase.from("tasks").select("id, project_id, column_id, client_id, work_stream_id, title, description, priority, due_date, cost, position, created_by, created_from_message_id, created_from_conversation_id, created_at, updated_at, manager_id").eq("id", taskId).single(),
     supabase.from("task_assignees").select("task_id, user_id").eq("task_id", taskId),
     supabase.from("members").select("id, full_name, avatar_url, clerk_id"),
     supabase.from("task_comments").select("id, task_id, author_id, body, created_at").eq("task_id", taskId).order("created_at").limit(100),
@@ -410,6 +423,7 @@ export async function getTaskDetail(taskId: string) {
   return {
     ...task,
     assignees,
+    manager_name: task.manager_id ? memberMap[task.manager_id]?.full_name ?? null : null,
     comments,
     attachments,
     links: linksRes.data || [],
@@ -553,6 +567,60 @@ export async function deleteLink(linkId: string) {
     .from("task_links")
     .delete()
     .eq("id", linkId);
+  if (error) throw error;
+}
+
+// ─── Subtasks ─────────────────────────────────────────────────────────────────
+
+export async function getSubtasksByTaskIds(taskIds: string[]) {
+  if (taskIds.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("subtasks")
+    .select("id, task_id, title, completed, position")
+    .in("task_id", taskIds)
+    .order("position");
+  if (error) throw error;
+  return data;
+}
+
+export async function createSubtask(taskId: string, title: string) {
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("subtasks")
+    .select("position")
+    .eq("task_id", taskId)
+    .order("position", { ascending: false })
+    .limit(1);
+  const nextPos = existing && existing.length > 0 ? existing[0].position + 1000 : 0;
+
+  const { data, error } = await supabase
+    .from("subtasks")
+    .insert({ task_id: taskId, title, position: nextPos })
+    .select("id, task_id, title, completed, position")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateSubtaskAction(
+  subtaskId: string,
+  updates: { title?: string; completed?: boolean }
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("subtasks")
+    .update(updates)
+    .eq("id", subtaskId);
+  if (error) throw error;
+}
+
+export async function deleteSubtask(subtaskId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("subtasks")
+    .delete()
+    .eq("id", subtaskId);
   if (error) throw error;
 }
 

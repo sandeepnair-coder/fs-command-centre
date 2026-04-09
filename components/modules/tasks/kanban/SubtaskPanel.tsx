@@ -8,11 +8,10 @@ import { Progress } from "@/components/ui/progress";
 import { Plus, Trash2, GripVertical } from "lucide-react";
 import type { Subtask } from "@/lib/types/tasks";
 import {
-  addSubtask,
-  toggleSubtask,
-  removeSubtask,
-  updateSubtaskTitle,
-} from "@/lib/tasks/subtasks";
+  createSubtask,
+  updateSubtaskAction,
+  deleteSubtask,
+} from "@/app/(app)/tasks/actions";
 import { cn } from "@/lib/utils";
 
 export function SubtaskPanel({
@@ -32,38 +31,60 @@ export function SubtaskPanel({
   const total = subtasks.length;
   const percent = total > 0 ? (completed / total) * 100 : 0;
 
-  function handleAdd() {
+  async function handleAdd() {
     const trimmed = newTitle.trim();
     if (!trimmed) return;
-    addSubtask(taskId, trimmed);
     setNewTitle("");
-    onUpdate([...subtasks, { id: crypto.randomUUID(), title: trimmed, completed: false }]);
+    // Optimistic update
+    const tempId = `temp-${Date.now()}`;
+    onUpdate([...subtasks, { id: tempId, title: trimmed, completed: false }]);
+    try {
+      const created = await createSubtask(taskId, trimmed);
+      onUpdate([...subtasks, { id: created.id, title: created.title, completed: created.completed }]);
+    } catch {
+      // Revert on failure
+      onUpdate(subtasks);
+    }
   }
 
-  function handleToggle(subtaskId: string) {
-    toggleSubtask(taskId, subtaskId);
+  async function handleToggle(subtaskId: string) {
+    const target = subtasks.find((s) => s.id === subtaskId);
+    if (!target) return;
     onUpdate(
       subtasks.map((s) =>
         s.id === subtaskId ? { ...s, completed: !s.completed } : s
       )
     );
+    try {
+      await updateSubtaskAction(subtaskId, { completed: !target.completed });
+    } catch {
+      onUpdate(subtasks);
+    }
   }
 
-  function handleRemove(subtaskId: string) {
-    removeSubtask(taskId, subtaskId);
+  async function handleRemove(subtaskId: string) {
     onUpdate(subtasks.filter((s) => s.id !== subtaskId));
+    try {
+      await deleteSubtask(subtaskId);
+    } catch {
+      onUpdate(subtasks);
+    }
   }
 
-  function handleEditSave(subtaskId: string) {
+  async function handleEditSave(subtaskId: string) {
     const trimmed = editValue.trim();
     if (!trimmed) return;
-    updateSubtaskTitle(taskId, subtaskId, trimmed);
     onUpdate(
       subtasks.map((s) =>
         s.id === subtaskId ? { ...s, title: trimmed } : s
       )
     );
     setEditingId(null);
+    try {
+      await updateSubtaskAction(subtaskId, { title: trimmed });
+    } catch {
+      onUpdate(subtasks);
+    }
   }
 
   return (
