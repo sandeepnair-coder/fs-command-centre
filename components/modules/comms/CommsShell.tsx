@@ -208,12 +208,18 @@ const DEMO_MESSAGES: Record<string, CommsMessage[]> = {
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function CommsShell() {
+export function CommsShell({
+  initialConversations = [],
+  initialClients = [],
+}: {
+  initialConversations?: (Conversation & { client_name: string | null })[];
+  initialClients?: { id: string; name: string }[];
+} = {}) {
   const [activeTab, setActiveTab] = useState<ChannelTab>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [search, setSearch] = useState("");
-  const [conversations, setConversations] = useState<(Conversation & { client_name: string | null })[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [conversations, setConversations] = useState<(Conversation & { client_name: string | null })[]>(initialConversations);
+  const [loading, setLoading] = useState(initialConversations.length === 0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<CommsMessage[]>([]);
   const [clientInsight, setClientInsight] = useState<Awaited<ReturnType<typeof getClientCrmInsight>> | null>(null);
@@ -408,12 +414,18 @@ export function CommsShell() {
   }, []);
 
   useEffect(() => {
+    if (initialConversations.length > 0) return;
     setLoading(true);
     getConversations()
       .then((data) => setConversations(data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Seed clientsList from server-prefetched data
+  useEffect(() => {
+    if (initialClients.length > 0) setClientsList(initialClients);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = conversations.filter((c) => {
     if (activeTab !== "all" && c.channel !== activeTab) return false;
@@ -586,35 +598,51 @@ export function CommsShell() {
 
             {/* Messages */}
             <ScrollArea className="flex-1">
-              <div className="space-y-1 p-4">
+              <div className="space-y-3 p-4">
                 {messages.map((msg) => (
-                  <div key={msg.id} className={cn("rounded-lg border p-3", msg.is_from_client ? "bg-background" : "bg-muted/30")}>
-                    <div className="flex items-center gap-2">
-                      <span className={cn("text-sm font-medium", msg.is_from_client ? "text-primary" : "text-foreground")}>
+                  <div key={msg.id} className={cn(
+                    "flex flex-col max-w-[85%]",
+                    msg.is_from_client ? "self-start items-start" : "self-end items-end ml-auto"
+                  )}>
+                    {/* Sender row */}
+                    <div className="flex items-center gap-1.5 mb-1 px-1">
+                      <span className={cn("text-[11px] font-semibold",
+                        msg.is_from_client ? "text-blue-600 dark:text-blue-400" : "text-emerald-600 dark:text-emerald-400"
+                      )}>
                         {msg.sender_display_name || "Unknown"}
                       </span>
-                      {msg.is_from_client && <Badge variant="outline" className="text-[9px] h-3.5 px-1">Client</Badge>}
-                      <Badge variant="outline" className={cn("text-[9px] h-3.5 px-1", CHANNEL_CONFIG[msg.channel].color)}>
+                      <Badge variant="outline" className={cn("text-[8px] h-3 px-1", CHANNEL_CONFIG[msg.channel].color)}>
                         {CHANNEL_CONFIG[msg.channel].label}
                       </Badge>
                       {msg.classification && msg.classification !== "general" && (
-                        <Badge variant="secondary" className={cn("text-[9px] h-3.5 px-1", CLASSIFICATION_CONFIG[msg.classification].color)}>
+                        <Badge variant="secondary" className={cn("text-[8px] h-3 px-1", CLASSIFICATION_CONFIG[msg.classification].color)}>
                           {CLASSIFICATION_CONFIG[msg.classification].label}
                         </Badge>
                       )}
-                      {msg.has_attachments && <Paperclip className="size-3 text-muted-foreground" />}
-                      <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
+                      {msg.has_attachments && <Paperclip className="size-2.5 text-muted-foreground" />}
+                    </div>
+                    {/* Bubble */}
+                    <div className={cn(
+                      "rounded-xl px-3.5 py-2.5 text-sm whitespace-pre-wrap text-pretty leading-relaxed",
+                      msg.is_from_client
+                        ? "bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 text-foreground rounded-tl-sm"
+                        : "bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 text-foreground rounded-tr-sm"
+                    )}>
+                      {msg.body_text}
+                    </div>
+                    {/* Timestamp + actions */}
+                    <div className="flex items-center gap-1 mt-0.5 px-1">
+                      <span className="text-[10px] tabular-nums text-muted-foreground">
                         {format(new Date(msg.created_at), "d MMM, h:mm a")}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm text-foreground/80 whitespace-pre-wrap text-pretty leading-relaxed">{msg.body_text}</p>
-                    {/* Inline actions */}
-                    <div className="mt-2 flex flex-wrap gap-1 opacity-0 hover:opacity-100 transition-opacity focus-within:opacity-100">
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => { openActionDialog("create_task", msg); updateForm("title", msg.body_text.slice(0, 80)); }}><ListPlus className="mr-0.5 size-3" /> Task</Button>
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => { openActionDialog("save_fact", msg); updateForm("factValue", msg.body_text.slice(0, 200)); }}><Bookmark className="mr-0.5 size-3" /> Fact</Button>
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => { openActionDialog("add_contact", msg); updateForm("contactName", msg.sender_display_name || ""); updateForm("contactEmail", msg.sender_identifier || ""); }}><UserPlus className="mr-0.5 size-3" /> Contact</Button>
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => handleClassifyApproval(msg)}><ThumbsUp className="mr-0.5 size-3" /> Approval</Button>
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => openActionDialog("set_follow_up", msg)}><CalendarClock className="mr-0.5 size-3" /> Follow-up</Button>
+                    {/* Inline actions (on hover) */}
+                    <div className="flex flex-wrap gap-1 mt-1 opacity-0 hover:opacity-100 transition-opacity focus-within:opacity-100">
+                      <Button variant="ghost" size="sm" className="h-5 text-[9px] px-1.5" onClick={() => { openActionDialog("create_task", msg); updateForm("title", msg.body_text.slice(0, 80)); }}><ListPlus className="mr-0.5 size-2.5" /> Task</Button>
+                      <Button variant="ghost" size="sm" className="h-5 text-[9px] px-1.5" onClick={() => { openActionDialog("save_fact", msg); updateForm("factValue", msg.body_text.slice(0, 200)); }}><Bookmark className="mr-0.5 size-2.5" /> Fact</Button>
+                      <Button variant="ghost" size="sm" className="h-5 text-[9px] px-1.5" onClick={() => { openActionDialog("add_contact", msg); updateForm("contactName", msg.sender_display_name || ""); updateForm("contactEmail", msg.sender_identifier || ""); }}><UserPlus className="mr-0.5 size-2.5" /> Contact</Button>
+                      <Button variant="ghost" size="sm" className="h-5 text-[9px] px-1.5" onClick={() => handleClassifyApproval(msg)}><ThumbsUp className="mr-0.5 size-2.5" /> Approval</Button>
+                      <Button variant="ghost" size="sm" className="h-5 text-[9px] px-1.5" onClick={() => openActionDialog("set_follow_up", msg)}><CalendarClock className="mr-0.5 size-2.5" /> Follow-up</Button>
                     </div>
                   </div>
                 ))}
