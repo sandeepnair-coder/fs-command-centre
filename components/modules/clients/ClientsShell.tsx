@@ -886,7 +886,7 @@ export function ClientsShell({ initialClients = [] }: { initialClients?: ClientS
                             ) : client.logo_url ? (
                               <img src={client.logo_url} alt="" className="size-9 rounded-full object-cover border" />
                             ) : (
-                              <div className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary shrink-0">
+                              <div className="flex size-9 items-center justify-center rounded-full bg-muted border border-border text-sm font-bold text-foreground shrink-0">
                                 {client.name.charAt(0).toUpperCase()}
                               </div>
                             )}
