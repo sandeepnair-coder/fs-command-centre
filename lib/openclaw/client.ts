@@ -85,7 +85,7 @@ async function openclawRequest<T = unknown>(
             maxProtocol: 3,
             client: CLIENT_INFO,
             auth: { token: OPENCLAW_API_TOKEN },
-            role: "operator",
+            role: "admin",
           },
         }));
         return;
@@ -188,7 +188,7 @@ export async function checkOpenClawHealth(): Promise<{
             maxProtocol: 3,
             client: CLIENT_INFO,
             auth: { token: OPENCLAW_API_TOKEN },
-            role: "operator",
+            role: "admin",
           },
         }));
         return;

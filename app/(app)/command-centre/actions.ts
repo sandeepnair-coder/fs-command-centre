@@ -266,21 +266,33 @@ export async function askOpenClaw(question: string): Promise<string> {
   const member = await getCurrentMember();
   if (!member?.is_manager) throw new Error("Manager access required");
 
-  const { openclawIntelligence } = await import("@/lib/openclaw/client");
+  const wsUrl = process.env.OPENCLAW_API_URL;
+  const token = process.env.OPENCLAW_API_TOKEN;
+  if (!wsUrl || !token) throw new Error("OpenClaw not configured");
 
-  const systemPrompt = `You are Tessa, the AI assistant for Fynd Studio Command Centre. You help managers with:
-- Summarising project/client status
-- Answering questions about tasks, deadlines, and team workload
-- Providing business insights from meeting notes and conversations
-- Suggesting next actions and priorities
+  // Use the REST /tessa/chat endpoint (same as Slack bot)
+  const baseUrl = wsUrl.replace("wss://", "https://").replace("ws://", "http://");
+  const sessionId = `tessa-web-${member.id}`;
 
-Be concise and actionable. Use markdown for formatting. If you don't know something, say so.`;
+  const res = await fetch(`${baseUrl}/tessa/chat`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ message: question, sessionId }),
+    signal: AbortSignal.timeout(120000),
+  });
 
-  const result = await openclawIntelligence<{ response: string }>(
-    "chat",
-    { prompt: systemPrompt, message: question, context: null },
-    30000,
-  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "API error");
 
-  return result.response || "No response received. Try rephrasing your question.";
+  // Extract text from OpenClaw agent response
+  const payloads = data.result?.payloads || data.payloads;
+  if (Array.isArray(payloads) && payloads.length > 0) {
+    return payloads.map((p: { text?: string }) => p.text).filter(Boolean).join("\n\n");
+  }
+  if (data.text) return data.text;
+
+  return "No response received. Try rephrasing your question.";
 }
