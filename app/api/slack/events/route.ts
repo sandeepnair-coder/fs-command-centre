@@ -224,11 +224,80 @@ async function processEvent(
         status: "analyzed",
       })
       .eq("id", insight.id);
+    // Post summary back to Slack as a threaded reply
+    await postSlackReply(channelId, ts || "", analysis);
   } catch (err) {
     console.error("[slack/events] Analysis failed:", err);
     await supabase
       .from("opportunity_insights")
       .update({ status: "error" })
       .eq("id", insight.id);
+  }
+}
+
+// ─── Post summary to Slack ─────────────────────────────────────────────────
+
+async function postSlackReply(
+  channelId: string,
+  threadTs: string,
+  analysis: { summary: string; is_client_related: boolean; upsell_opportunity: boolean; recommended_service: string | null; confidence_score: number | null; rationale: string },
+) {
+  const botToken = process.env.SLACK_BOT_TOKEN;
+  if (!botToken) return;
+
+  const blocks: unknown[] = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*Tessa's Summary*\n${analysis.summary}`,
+      },
+    },
+  ];
+
+  // Add opportunity info if detected
+  if (analysis.is_client_related || analysis.upsell_opportunity) {
+    const fields: { type: string; text: string }[] = [];
+    if (analysis.is_client_related) {
+      fields.push({ type: "mrkdwn", text: ":briefcase: *Client Related:* Yes" });
+    }
+    if (analysis.upsell_opportunity && analysis.recommended_service) {
+      fields.push({ type: "mrkdwn", text: `:chart_with_upwards_trend: *Opportunity:* ${analysis.recommended_service}` });
+    }
+    if (analysis.confidence_score !== null) {
+      fields.push({ type: "mrkdwn", text: `:dart: *Confidence:* ${Math.round(analysis.confidence_score * 100)}%` });
+    }
+    if (fields.length > 0) {
+      blocks.push({ type: "section", fields });
+    }
+  }
+
+  if (analysis.rationale) {
+    blocks.push({
+      type: "context",
+      elements: [{ type: "mrkdwn", text: `_${analysis.rationale}_` }],
+    });
+  }
+
+  try {
+    const res = await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${botToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        channel: channelId,
+        thread_ts: threadTs || undefined,
+        blocks,
+        text: `Tessa's Summary: ${analysis.summary}`,
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      console.error("[slack/events] Failed to post reply:", data.error);
+    }
+  } catch (err) {
+    console.error("[slack/events] Failed to post reply:", err);
   }
 }
