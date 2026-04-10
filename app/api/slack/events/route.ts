@@ -97,24 +97,45 @@ async function processEvent(
     return;
   }
 
-  // Ignore bot messages, edits, and subtypes we don't care about
+  // Ignore edits and deletes
   const subtype = event.subtype as string | undefined;
   if (subtype === "message_changed" || subtype === "message_deleted") {
     console.log("[slack/events] Skipping subtype:", subtype);
     return;
   }
-  if (event.bot_id || event.bot_profile) {
-    console.log("[slack/events] Skipping bot message");
-    return;
+
+  // Extract text — Granola posts content in attachments/blocks, not always in text
+  const channelId = event.channel as string;
+  let text = (event.text as string) || "";
+
+  // Pull text from attachments (Granola unfurls use this)
+  const attachments = event.attachments as { text?: string; pretext?: string; fallback?: string; title?: string }[] | undefined;
+  if (attachments?.length) {
+    const attachText = attachments
+      .map((a) => [a.pretext, a.title, a.text, a.fallback].filter(Boolean).join("\n"))
+      .join("\n\n");
+    if (attachText.length > text.length) text = attachText;
+    console.log("[slack/events] Extracted attachment text, length:", text.length);
   }
 
-  const channelId = event.channel as string;
-  const text = (event.text as string) || "";
+  // Pull text from blocks
+  const blocks = event.blocks as { type?: string; text?: { text?: string } }[] | undefined;
+  if (blocks?.length) {
+    const blockText = blocks
+      .filter((b) => b.type === "section" || b.type === "rich_text")
+      .map((b) => b.text?.text || "")
+      .filter(Boolean)
+      .join("\n");
+    if (blockText.length > text.length) text = blockText;
+  }
+
+  const isBotMessage = !!(event.bot_id || event.bot_profile);
+  const botId = event.bot_id as string | undefined;
   const userId = event.user as string | undefined;
   const ts = event.ts as string | undefined;
   const threadTs = event.thread_ts as string | undefined;
 
-  console.log("[slack/events] Processing message from", userId, "in", channelId, "length:", text.length);
+  console.log("[slack/events] Processing message from", userId, "in", channelId, "length:", text.length, "isBot:", isBotMessage);
 
   // Channel filter
   if (ALLOWED_CHANNELS.length > 0 && !ALLOWED_CHANNELS.includes(channelId)) {
@@ -122,9 +143,16 @@ async function processEvent(
     return;
   }
 
-  // Detect Granola-style notes
-  const detection = detectGranolaNote(text, userId);
+  // Detect Granola-style notes (allow bot messages through — Granola posts as a bot)
+  const detection = detectGranolaNote(text, userId, botId);
   console.log("[slack/events] Detection result:", detection.isGranolaNote, detection.reason, detection.confidence);
+
+  // For bot messages, only proceed if detected as Granola note
+  if (isBotMessage && !detection.isGranolaNote) {
+    console.log("[slack/events] Bot message but not Granola note, skipping");
+    return;
+  }
+  // For human messages, also require detection
   if (!detection.isGranolaNote) return;
 
   const supabase = await createClient();

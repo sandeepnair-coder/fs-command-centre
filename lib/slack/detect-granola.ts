@@ -15,6 +15,10 @@ const GRANOLA_KEYWORDS = [
   "participants",
   "transcript",
   "recap",
+  "tl;dr",
+  "granola",
+  "added by granola",
+  "open in granola",
 ];
 
 // Known Granola bot user IDs (add actual IDs once known)
