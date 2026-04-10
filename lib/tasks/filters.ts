@@ -5,6 +5,7 @@ export const DEFAULT_FILTERS: TaskFilters = {
   search: "",
   priority: "all",
   assignee: "all",
+  manager: "all",
   dueDate: "all",
   client: "all",
 };
@@ -28,6 +29,11 @@ export function filterTasks(tasks: Task[], filters: TaskFilters): Task[] {
     // Assignee
     if (filters.assignee !== "all") {
       if (!task.assignees?.some((a) => a.user_id === filters.assignee)) return false;
+    }
+
+    // Manager
+    if (filters.manager !== "all") {
+      if (task.manager_id !== filters.manager) return false;
     }
 
     // Due date
@@ -78,6 +84,7 @@ export function getActiveFilterCount(filters: TaskFilters): number {
   if (filters.search) count++;
   if (filters.priority !== "all") count++;
   if (filters.assignee !== "all") count++;
+  if (filters.manager !== "all") count++;
   if (filters.dueDate !== "all") count++;
   if (filters.client !== "all") count++;
   return count;

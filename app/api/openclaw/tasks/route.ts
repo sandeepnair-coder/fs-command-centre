@@ -27,30 +27,8 @@ export async function POST(req: NextRequest) {
 
     const supabase = await createClient();
 
-    // Resolve board by name
-    let projectId: string | null = null;
-    if (board) {
-      const { data: projects } = await supabase
-        .from("projects")
-        .select("id, name")
-        .ilike("name", `%${board}%`)
-        .limit(1);
-      projectId = projects?.[0]?.id || null;
-    }
-
-    if (!projectId) {
-      // Fall back to first active project
-      const { data: projects } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("status", "active")
-        .limit(1);
-      projectId = projects?.[0]?.id || null;
-    }
-
-    if (!projectId) {
-      return NextResponse.json({ error: "No board found. Specify a valid board name." }, { status: 404 });
-    }
+    // Always use Fynd Design Tasks board
+    const projectId = "e36336eb-b641-455f-a942-54770d3fa8be";
 
     // Resolve column by name (or use first column)
     let columnId: string | null = null;

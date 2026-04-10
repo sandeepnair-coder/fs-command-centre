@@ -1,8 +1,11 @@
 import { Users } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { ClientsShell } from "@/components/modules/clients/ClientsShell";
+import { getClientStats } from "@/app/(app)/clients/actions";
 
-export default function ClientsPage() {
+export default async function ClientsPage() {
+  const initialClients = await getClientStats().catch(() => []);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-4 shrink-0">
@@ -16,7 +19,7 @@ export default function ClientsPage() {
       </div>
       <Separator className="mb-4 shrink-0" />
       <div className="min-h-0 flex-1 overflow-hidden">
-        <ClientsShell />
+        <ClientsShell initialClients={initialClients} />
       </div>
     </div>
   );

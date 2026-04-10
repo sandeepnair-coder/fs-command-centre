@@ -1,8 +1,12 @@
 import { Suspense } from "react";
+import dynamic from "next/dynamic";
 import { Cable } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { IntegrationsShell } from "@/components/modules/settings/IntegrationsShell";
+const IntegrationsShell = dynamic(
+  () => import("@/components/modules/settings/IntegrationsShell").then((m) => ({ default: m.IntegrationsShell })),
+  { loading: () => <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><Skeleton className="h-72 rounded-xl" /><Skeleton className="h-72 rounded-xl" /><Skeleton className="h-72 rounded-xl" /></div> }
+);
 
 export default function IntegrationsPage() {
   return (

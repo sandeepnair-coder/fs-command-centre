@@ -231,7 +231,7 @@ export function ConnectorsShell() {
                   </div>
                 )}
                 <p className="text-[10px] text-muted-foreground tabular-nums">
-                  Gateway: ws://64.23.177.147:18789
+                  Gateway: wss://openclaw.tail030cbd.ts.net
                 </p>
                 <p className="text-[10px] text-muted-foreground tabular-nums">
                   API Base: https://studio.fynd.design/api/v1

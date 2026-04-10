@@ -26,8 +26,16 @@ async function resolveColumnId(projectId: string, colName: string) {
 
 async function resolveMemberId(name: string) {
   const supabase = await createClient();
+  // Try exact-ish match first
   const { data } = await supabase.from("members").select("id, full_name").ilike("full_name", `%${name}%`).eq("status", "active").limit(1);
-  return data?.[0]?.id || null;
+  if (data?.[0]) return data[0].id;
+  // Fallback: match on first name only
+  const firstName = name.split(/\s+/)[0];
+  if (firstName.length >= 3) {
+    const { data: fallback } = await supabase.from("members").select("id, full_name").ilike("full_name", `${firstName}%`).eq("status", "active").limit(1);
+    if (fallback?.[0]) return fallback[0].id;
+  }
+  return null;
 }
 
 async function validateClientId(clientId: string) {
@@ -62,12 +70,8 @@ export async function createTasksForProject(input: CreateTasksInput) {
     if (existing) return { deduplicated: true, ...(existing.response_json as Record<string, unknown>) };
   }
 
-  let projectId = input.project_id;
-  if (!projectId && input.project_name) {
-    const { data } = await supabase.from("projects").select("id").ilike("name", `%${input.project_name}%`).limit(1);
-    projectId = data?.[0]?.id;
-  }
-  if (!projectId) throw new Error("Project not found.");
+  // Always use the Fynd Design Tasks board
+  const projectId = "e36336eb-b641-455f-a942-54770d3fa8be";
 
   const { data: columns } = await supabase.from("project_columns").select("id, name").eq("project_id", projectId).order("position");
   if (!columns?.length) throw new Error("No columns on this board.");

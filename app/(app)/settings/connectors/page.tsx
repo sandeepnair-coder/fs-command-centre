@@ -1,8 +1,12 @@
 import { Suspense } from "react";
+import dynamic from "next/dynamic";
 import { Settings, Plug2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ConnectorsShell } from "@/components/modules/settings/ConnectorsShell";
+const ConnectorsShell = dynamic(
+  () => import("@/components/modules/settings/ConnectorsShell").then((m) => ({ default: m.ConnectorsShell })),
+  { loading: () => <div className="grid gap-4 sm:grid-cols-2"><Skeleton className="h-64 rounded-xl" /></div> }
+);
 
 export default function ConnectorsPage() {
   return (

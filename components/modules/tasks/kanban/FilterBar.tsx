@@ -129,6 +129,24 @@ export function FilterBar({
           </SelectContent>
         </Select>
 
+        {/* Manager */}
+        <Select
+          value={filters.manager}
+          onValueChange={(v) => onFiltersChange({ ...filters, manager: v })}
+        >
+          <SelectTrigger className="h-8 w-[140px] text-xs">
+            <SelectValue placeholder="Manager" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Managers</SelectItem>
+            {profiles.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.full_name || "Unnamed"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         {/* Due Date */}
         <Select
           value={filters.dueDate}

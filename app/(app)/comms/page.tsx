@@ -1,8 +1,15 @@
 import { MessageSquareText } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { CommsShell } from "@/components/modules/comms/CommsShell";
+import { getConversations } from "@/app/(app)/comms/actions";
+import { getClients } from "@/app/(app)/tasks/actions";
 
-export default function CommsPage() {
+export default async function CommsPage() {
+  const [initialConversations, initialClients] = await Promise.all([
+    getConversations().catch(() => []),
+    getClients().catch(() => []),
+  ]);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-4 shrink-0">
@@ -16,7 +23,7 @@ export default function CommsPage() {
       </div>
       <Separator className="mb-4 shrink-0" />
       <div className="min-h-0 flex-1 overflow-hidden">
-        <CommsShell />
+        <CommsShell initialConversations={initialConversations} initialClients={initialClients} />
       </div>
     </div>
   );

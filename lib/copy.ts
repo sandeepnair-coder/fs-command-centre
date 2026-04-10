@@ -48,6 +48,13 @@ export const LOADING_QUOTES = {
     "Pulling threads. Not the emotional kind.",
     "Your inbox called. It has opinions.",
   ],
+  commandCentre: [
+    "Scanning the horizon. Threats and opportunities incoming.",
+    "Loading the war room. Try to look important.",
+    "Aggregating everything. You asked for the big picture.",
+    "Pulling all the strings. Carefully.",
+    "Command Centre online. Awaiting orders.",
+  ],
   finance: [
     "Crunching numbers. Some of them crunch back.",
     "Loading the money trail. Follow it carefully.",
