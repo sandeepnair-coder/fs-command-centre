@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
@@ -413,6 +413,11 @@ function AskOpenClawPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
 
   const handleSend = useCallback(async () => {
     const question = input.trim();
@@ -436,7 +441,7 @@ function AskOpenClawPanel() {
   }, [input, loading]);
 
   return (
-    <Card className="flex h-full flex-col">
+    <Card className="flex h-full flex-col overflow-hidden">
       <CardHeader className="shrink-0 pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Bot className="size-4" />
@@ -447,7 +452,7 @@ function AskOpenClawPanel() {
         </p>
       </CardHeader>
       <Separator />
-      <ScrollArea className="flex-1 p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {messages.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <Bot className="size-8 text-muted-foreground/40" />
@@ -498,8 +503,9 @@ function AskOpenClawPanel() {
               </div>
             </div>
           )}
+          <div ref={bottomRef} />
         </div>
-      </ScrollArea>
+      </div>
       <div className="shrink-0 border-t p-3">
         <form
           onSubmit={(e) => {
