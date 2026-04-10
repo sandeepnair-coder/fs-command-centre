@@ -13,7 +13,7 @@ export default function ConnectorsPage() {
     <div className="flex flex-col h-full overflow-y-auto">
       <div className="mb-4">
         <div className="flex items-center gap-2">
-          <Plug2 className="size-6" />
+          <Plug2 className="size-6 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight text-balance">Connectors</h1>
         </div>
         <p className="mt-1 text-sm text-muted-foreground text-pretty">

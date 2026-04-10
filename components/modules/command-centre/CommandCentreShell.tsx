@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
   ArrowRight,
@@ -110,23 +111,30 @@ export function CommandCentreShell({
 // ─── Metrics Row ────────────────────────────────────────────────────────────
 
 function MetricsRow({ metrics }: { metrics: SnapshotMetrics }) {
-  const cards = [
+  const cards: { label: string; value: number; href: string; icon: typeof Briefcase; alert?: boolean; positive?: boolean }[] = [
     { label: "Active Tasks", value: metrics.activeTasks, href: "/tasks", icon: Briefcase },
     { label: "Overdue", value: metrics.overdueTasks, href: "/tasks", icon: AlertTriangle, alert: metrics.overdueTasks > 0 },
-    { label: "Clients", value: metrics.totalClients, href: "/clients", icon: Users },
+    { label: "Clients", value: metrics.totalClients, href: "/clients", icon: Users, positive: metrics.totalClients > 0 },
     { label: "Needs Reply", value: metrics.needsReply, href: "/comms", icon: MessageSquare, alert: metrics.needsReply > 0 },
-    { label: "Opportunities", value: metrics.opportunities, href: "/settings/integrations/slack-insights", icon: Lightbulb },
+    { label: "Opportunities", value: metrics.opportunities, href: "/settings/integrations/slack-insights", icon: Lightbulb, positive: metrics.opportunities > 0 },
   ];
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {cards.map((c) => (
         <Link key={c.label} href={c.href}>
-          <Card className={`transition-colors hover:bg-muted/50 ${c.alert ? "border-destructive/50" : ""}`}>
+          <Card className={cn(
+            "transition-colors hover:bg-muted/50",
+            c.alert && "border-destructive/50",
+            c.positive && "border-primary/30",
+          )}>
             <CardContent className="flex items-center gap-3 p-4">
-              <c.icon className={`size-5 shrink-0 ${c.alert ? "text-destructive" : "text-muted-foreground"}`} />
+              <c.icon className={cn(
+                "size-5 shrink-0",
+                c.alert ? "text-destructive" : c.positive ? "text-primary" : "text-muted-foreground",
+              )} />
               <div className="min-w-0">
-                <p className={`text-2xl font-bold tabular-nums ${c.alert ? "text-destructive" : ""}`}>{c.value}</p>
+                <p className={cn("text-2xl font-bold tabular-nums", c.alert && "text-destructive")}>{c.value}</p>
                 <p className="truncate text-xs text-muted-foreground">{c.label}</p>
               </div>
             </CardContent>

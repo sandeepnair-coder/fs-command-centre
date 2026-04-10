@@ -62,11 +62,11 @@ function NavLink({
           className={cn(
             "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
             active
-              ? "bg-muted text-foreground font-medium"
-              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              ? "bg-primary/10 text-foreground font-medium border-l-2 border-l-primary"
+              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground border-l-2 border-l-transparent"
           )}
         >
-          <Icon className="h-4 w-4 shrink-0" />
+          <Icon className={cn("h-4 w-4 shrink-0", active && "text-primary")} />
           <span className="truncate">{label}</span>
         </Link>
       </TooltipTrigger>
@@ -87,14 +87,14 @@ export function AppSidebar({ role = "member", isManager = false }: { role?: Memb
   );
 
   return (
-    <aside className="flex h-full w-56 flex-col border-r bg-sidebar">
+    <aside className="flex h-full w-56 flex-col border-r border-r-primary/15 bg-sidebar">
       {/* Brand header */}
       <div className="flex h-14 items-center px-5">
         <Link
           href="/tasks"
           className="flex items-center gap-2 text-sm font-bold tracking-tight text-foreground"
         >
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-foreground text-background text-xs font-bold">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
             F
           </span>
           Fynd Studio

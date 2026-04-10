@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { cn } from "@/lib/utils";
 import type { Task } from "@/lib/types/tasks";
 import {
   useDroppable,
@@ -193,9 +194,11 @@ export function KanbanColumn({
 
   return (
     <Card
-      className={`w-[280px] flex-shrink-0 flex flex-col h-full rounded-xl shadow-none ${
-        isOver ? "ring-2 ring-primary/30" : ""
-      }`}
+      className={cn(
+        "w-[280px] flex-shrink-0 flex flex-col h-full rounded-xl shadow-none",
+        isOver && "ring-2 ring-primary/30",
+        /done|approved|completed/i.test(column.name) && "bg-emerald-50/40 dark:bg-emerald-950/10",
+      )}
     >
       {/* ─── Header ─── */}
       <CardHeader className="px-3 py-2 flex-row items-center justify-between space-y-0">
@@ -218,7 +221,10 @@ export function KanbanColumn({
             />
           ) : (
             <span
-              className="text-sm font-semibold truncate cursor-pointer hover:text-primary"
+              className={cn(
+                "text-sm font-semibold truncate cursor-pointer hover:text-primary",
+                /done|approved|completed/i.test(column.name) && "text-emerald-600 dark:text-emerald-400",
+              )}
               onDoubleClick={() => setEditingName(true)}
             >
               {column.name}
