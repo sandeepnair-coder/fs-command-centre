@@ -402,6 +402,56 @@ function RecentCommsCard({ comms }: { comms: RecentComm[] }) {
   );
 }
 
+// ─── Simple Markdown Renderer ────────────────────────────────────────────────
+
+function renderMarkdown(text: string) {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let listItems: React.ReactNode[] = [];
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      elements.push(
+        <ul key={`ul-${elements.length}`} className="ml-4 list-disc space-y-0.5">
+          {listItems}
+        </ul>
+      );
+      listItems = [];
+    }
+  };
+
+  const inlineBold = (line: string, key: string): React.ReactNode => {
+    const parts = line.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, j) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return <strong key={`${key}-${j}`}>{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const bulletMatch = line.match(/^[-*]\s+(.+)/);
+
+    if (bulletMatch) {
+      listItems.push(<li key={`li-${i}`}>{inlineBold(bulletMatch[1], `li-${i}`)}</li>);
+    } else {
+      flushList();
+      if (line.trim() === "") {
+        if (i > 0 && i < lines.length - 1) {
+          elements.push(<div key={`br-${i}`} className="h-2" />);
+        }
+      } else {
+        elements.push(<p key={`p-${i}`}>{inlineBold(line, `p-${i}`)}</p>);
+      }
+    }
+  }
+  flushList();
+
+  return <div className="space-y-1">{elements}</div>;
+}
+
 // ─── Ask OpenClaw Panel ─────────────────────────────────────────────────────
 
 type ChatMessage = {
@@ -491,7 +541,7 @@ function AskOpenClawPanel() {
                     : "bg-muted"
                 }`}
               >
-                <p className="whitespace-pre-wrap">{msg.content}</p>
+                {msg.role === "assistant" ? renderMarkdown(msg.content) : <p>{msg.content}</p>}
               </div>
             </div>
           ))}

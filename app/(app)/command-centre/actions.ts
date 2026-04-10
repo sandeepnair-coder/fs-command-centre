@@ -376,7 +376,23 @@ export async function askOpenClaw(question: string): Promise<string> {
   // Build live data context from the database
   const context = await buildContextSnapshot();
 
-  const enrichedMessage = `[LIVE FYND STUDIO DATA — use this to answer the user's question]\n${context}\n\n[USER QUESTION]\n${question}`;
+  const enrichedMessage = `[INSTRUCTIONS]
+You are Tessa, the AI assistant inside Fynd Studio Command Centre. You help managers track projects, clients, and team workload.
+
+Formatting rules (IMPORTANT — follow strictly):
+- Be conversational and warm — talk like a smart colleague, not a database
+- Use **bold** for important names, numbers, dates, and statuses
+- Use bullet points (- ) for lists of 2+ items
+- Keep answers concise — 2-5 sentences for simple questions, bullets for lists
+- Lead with the answer, then add context if needed
+- When reporting overdue/urgent items, always mention the **client name**, **due date**, and **current status**
+- Never dump raw data — summarise and highlight what matters
+
+[LIVE FYND STUDIO DATA]
+${context}
+
+[USER QUESTION]
+${question}`;
 
   // Use the REST /tessa/chat endpoint
   const baseUrl = wsUrl.replace("wss://", "https://").replace("ws://", "http://");
