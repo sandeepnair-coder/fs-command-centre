@@ -63,6 +63,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
+  console.log("[slack/events] Received payload type:", payload.type);
+
   // Only handle event_callback
   if (payload.type !== "event_callback") {
     return NextResponse.json({ ok: true });
@@ -70,6 +72,8 @@ export async function POST(req: NextRequest) {
 
   const event = payload.event as Record<string, unknown> | undefined;
   if (!event) return NextResponse.json({ ok: true });
+
+  console.log("[slack/events] Event type:", event.type, "subtype:", event.subtype, "channel:", event.channel, "bot_id:", event.bot_id);
 
   // Fire-and-forget: process asynchronously, respond immediately
   processEvent(event, payload.event_id as string | undefined).catch((err) => {
@@ -88,12 +92,21 @@ async function processEvent(
   const type = event.type as string;
 
   // Only handle channel messages (and app_mention for future use)
-  if (type !== "message" && type !== "app_mention") return;
+  if (type !== "message" && type !== "app_mention") {
+    console.log("[slack/events] Skipping event type:", type);
+    return;
+  }
 
   // Ignore bot messages, edits, and subtypes we don't care about
   const subtype = event.subtype as string | undefined;
-  if (subtype === "message_changed" || subtype === "message_deleted") return;
-  if (event.bot_id || event.bot_profile) return;
+  if (subtype === "message_changed" || subtype === "message_deleted") {
+    console.log("[slack/events] Skipping subtype:", subtype);
+    return;
+  }
+  if (event.bot_id || event.bot_profile) {
+    console.log("[slack/events] Skipping bot message");
+    return;
+  }
 
   const channelId = event.channel as string;
   const text = (event.text as string) || "";
@@ -101,13 +114,17 @@ async function processEvent(
   const ts = event.ts as string | undefined;
   const threadTs = event.thread_ts as string | undefined;
 
+  console.log("[slack/events] Processing message from", userId, "in", channelId, "length:", text.length);
+
   // Channel filter
   if (ALLOWED_CHANNELS.length > 0 && !ALLOWED_CHANNELS.includes(channelId)) {
+    console.log("[slack/events] Channel not in allowed list:", channelId, "allowed:", ALLOWED_CHANNELS);
     return;
   }
 
   // Detect Granola-style notes
   const detection = detectGranolaNote(text, userId);
+  console.log("[slack/events] Detection result:", detection.isGranolaNote, detection.reason, detection.confidence);
   if (!detection.isGranolaNote) return;
 
   const supabase = await createClient();
