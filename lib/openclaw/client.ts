@@ -227,6 +227,16 @@ export async function checkOpenClawHealth(): Promise<{
   });
 }
 
+// ─── Generic Request (for new workflows) ────────────────────────────────────
+
+export async function openclawIntelligence<T = unknown>(
+  method: string,
+  params: Record<string, unknown>,
+  timeout = 60000,
+): Promise<T> {
+  return openclawRequest<T>(method, params, timeout);
+}
+
 // ─── Intelligence APIs ──────────────────────────────────────────────────────
 
 export async function summarizeThread(messages: {
