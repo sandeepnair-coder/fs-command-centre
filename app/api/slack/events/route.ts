@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { detectGranolaNote } from "@/lib/slack/detect-granola";
 import { analyzeSlackNote } from "@/lib/openclaw/analyze-slack-note";
+import { openclawIntelligence } from "@/lib/openclaw/client";
 
 const SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || "";
 const ALLOWED_CHANNELS = (process.env.SLACK_ALLOWED_CHANNEL_IDS || "")
@@ -135,8 +136,20 @@ async function processEvent(
   const ts = event.ts as string | undefined;
   const threadTs = event.thread_ts as string | undefined;
 
-  console.log("[slack/events] Processing message from", userId, "in", channelId, "length:", text.length, "isBot:", isBotMessage);
+  console.log("[slack/events] Processing message from", userId, "in", channelId, "length:", text.length, "isBot:", isBotMessage, "type:", type);
 
+  // ─── Flow 1: @Tessa mention → conversational reply ──────────────────────
+  if (type === "app_mention" || (!isBotMessage && text.match(/<@[A-Z0-9]+>/))) {
+    // Strip the @mention tag to get the user's actual question
+    const userMessage = text.replace(/<@[A-Z0-9]+>/g, "").trim();
+    if (userMessage.length > 0) {
+      console.log("[slack/events] @mention detected, handling conversation");
+      await handleConversation(channelId, ts || "", threadTs, userMessage, userId);
+      return;
+    }
+  }
+
+  // ─── Flow 2: Granola note detection ─────────────────────────────────────
   // Channel filter
   if (ALLOWED_CHANNELS.length > 0 && !ALLOWED_CHANNELS.includes(channelId)) {
     console.log("[slack/events] Channel not in allowed list:", channelId, "allowed:", ALLOWED_CHANNELS);
@@ -147,12 +160,10 @@ async function processEvent(
   const detection = detectGranolaNote(text, userId, botId);
   console.log("[slack/events] Detection result:", detection.isGranolaNote, detection.reason, detection.confidence);
 
-  // For bot messages, only proceed if detected as Granola note
   if (isBotMessage && !detection.isGranolaNote) {
     console.log("[slack/events] Bot message but not Granola note, skipping");
     return;
   }
-  // For human messages, also require detection
   if (!detection.isGranolaNote) return;
 
   const supabase = await createClient();
@@ -232,6 +243,87 @@ async function processEvent(
       .from("opportunity_insights")
       .update({ status: "error" })
       .eq("id", insight.id);
+  }
+}
+
+// ─── Conversational handler ────────────────────────────────────────────────
+
+async function handleConversation(
+  channelId: string,
+  messageTs: string,
+  threadTs: string | undefined,
+  userMessage: string,
+  userId?: string,
+) {
+  const botToken = process.env.SLACK_BOT_TOKEN;
+  if (!botToken) return;
+
+  // Gather thread context if this is in a thread
+  let threadContext = "";
+  const replyTs = threadTs || messageTs;
+  if (threadTs) {
+    try {
+      const res = await fetch("https://slack.com/api/conversations.replies", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${botToken}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ channel: channelId, ts: threadTs, limit: "20" }),
+      });
+      const data = await res.json();
+      if (data.ok && data.messages) {
+        threadContext = data.messages
+          .slice(0, -1) // exclude the current message
+          .map((m: { text?: string; user?: string }) => m.text || "")
+          .filter(Boolean)
+          .join("\n---\n");
+      }
+    } catch {}
+  }
+
+  // Build prompt
+  const systemPrompt = `You are Tessa, an AI assistant for Fynd Studio — a design and AI-generated media agency. You help the internal team with:
+- Summarizing meeting notes and conversations
+- Answering questions about projects, clients, and tasks
+- Providing insights about design, branding, and AI media
+- Helping with brainstorming and creative direction
+
+Be concise, helpful, and professional. Use Slack-compatible markdown (*bold*, _italic_, \`code\`). Keep responses short unless asked for detail. If you don't know something, say so honestly.`;
+
+  const prompt = threadContext
+    ? `${systemPrompt}\n\n--- Thread Context ---\n${threadContext}\n\n--- User's Message ---\n${userMessage}`
+    : `${systemPrompt}\n\n--- User's Message ---\n${userMessage}`;
+
+  let reply: string;
+  try {
+    const result = await openclawIntelligence<{ response: string }>(
+      "chat",
+      { prompt, message: userMessage, context: threadContext || null },
+      30000,
+    );
+    reply = result.response || "I processed your request but didn't get a clear response. Could you try rephrasing?";
+  } catch {
+    // Fallback: direct response without OpenClaw
+    reply = "I'm having trouble connecting to my brain right now. Give me a moment and try again.";
+  }
+
+  // Post reply in thread
+  try {
+    await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${botToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        channel: channelId,
+        thread_ts: replyTs,
+        text: reply,
+      }),
+    });
+  } catch (err) {
+    console.error("[slack/events] Failed to post conversation reply:", err);
   }
 }
 
