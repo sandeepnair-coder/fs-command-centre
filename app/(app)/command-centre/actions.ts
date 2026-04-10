@@ -260,6 +260,109 @@ export async function getRecentComms(): Promise<RecentComm[]> {
   }));
 }
 
+// ─── Build live context snapshot for Tessa ──────────────────────────────────
+
+async function buildContextSnapshot(): Promise<string> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().split("T")[0];
+
+  const [overdueRes, urgentRes, clientsRes, waitingRes, recentTasksRes] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select("title, due_date, priority, clients(name), project_columns(name)")
+      .lt("due_date", today)
+      .not("due_date", "is", null)
+      .order("due_date")
+      .limit(15),
+    supabase
+      .from("tasks")
+      .select("title, due_date, clients(name), project_columns(name)")
+      .eq("priority", "urgent")
+      .limit(10),
+    supabase
+      .from("clients")
+      .select("name, industry, primary_email")
+      .order("created_at", { ascending: false })
+      .limit(30),
+    supabase
+      .from("conversations")
+      .select("subject, channel, last_message_at, clients(name)")
+      .eq("status", "waiting_on_us")
+      .order("last_message_at")
+      .limit(10),
+    supabase
+      .from("tasks")
+      .select("title, priority, due_date, clients(name), project_columns(name)")
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
+
+  const lines: string[] = [`# Fynd Studio Live Data (as of ${today})`];
+
+  // Overdue tasks
+  const overdue = (overdueRes.data || []) as Record<string, unknown>[];
+  const overdueFilt = overdue.filter((t) => {
+    const col = t.project_columns as { name: string } | null;
+    return col?.name !== "Approved / Done";
+  });
+  if (overdueFilt.length > 0) {
+    lines.push("\n## Overdue Tasks");
+    for (const t of overdueFilt) {
+      const client = (t.clients as { name: string } | null)?.name || "No client";
+      const col = (t.project_columns as { name: string } | null)?.name || "Unknown";
+      lines.push(`- "${t.title}" | Due: ${t.due_date} | Client: ${client} | Status: ${col} | Priority: ${t.priority}`);
+    }
+  } else {
+    lines.push("\n## Overdue Tasks\nNone! All tasks are on time.");
+  }
+
+  // Urgent tasks
+  const urgent = (urgentRes.data || []) as Record<string, unknown>[];
+  const urgentFilt = urgent.filter((t) => {
+    const col = t.project_columns as { name: string } | null;
+    return col?.name !== "Approved / Done";
+  });
+  if (urgentFilt.length > 0) {
+    lines.push("\n## Urgent Tasks");
+    for (const t of urgentFilt) {
+      const client = (t.clients as { name: string } | null)?.name || "No client";
+      lines.push(`- "${t.title}" | Due: ${t.due_date || "No date"} | Client: ${client}`);
+    }
+  }
+
+  // Conversations needing reply
+  const waiting = (waitingRes.data || []) as Record<string, unknown>[];
+  if (waiting.length > 0) {
+    lines.push("\n## Conversations Waiting For Our Reply");
+    for (const c of waiting) {
+      const client = (c.clients as { name: string } | null)?.name || "Unknown";
+      lines.push(`- "${c.subject || "Untitled"}" | Channel: ${c.channel} | Client: ${client} | Since: ${c.last_message_at}`);
+    }
+  }
+
+  // Recent tasks
+  const recent = (recentTasksRes.data || []) as Record<string, unknown>[];
+  if (recent.length > 0) {
+    lines.push("\n## Recent Tasks (newest first)");
+    for (const t of recent) {
+      const client = (t.clients as { name: string } | null)?.name || "No client";
+      const col = (t.project_columns as { name: string } | null)?.name || "Unknown";
+      lines.push(`- "${t.title}" | Status: ${col} | Priority: ${t.priority} | Due: ${t.due_date || "No date"} | Client: ${client}`);
+    }
+  }
+
+  // Clients
+  const clients = clientsRes.data || [];
+  if (clients.length > 0) {
+    lines.push(`\n## Clients (${clients.length} total)`);
+    for (const c of clients) {
+      lines.push(`- ${c.name}${c.industry ? ` (${c.industry})` : ""}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
 // ─── Ask OpenClaw ───────────────────────────────────────────────────────────
 
 export async function askOpenClaw(question: string): Promise<string> {
@@ -270,7 +373,12 @@ export async function askOpenClaw(question: string): Promise<string> {
   const token = process.env.OPENCLAW_API_TOKEN;
   if (!wsUrl || !token) throw new Error("OpenClaw not configured");
 
-  // Use the REST /tessa/chat endpoint (same as Slack bot)
+  // Build live data context from the database
+  const context = await buildContextSnapshot();
+
+  const enrichedMessage = `[LIVE FYND STUDIO DATA — use this to answer the user's question]\n${context}\n\n[USER QUESTION]\n${question}`;
+
+  // Use the REST /tessa/chat endpoint
   const baseUrl = wsUrl.replace("wss://", "https://").replace("ws://", "http://");
   const sessionId = `tessa-web-${member.id}`;
 
@@ -280,7 +388,7 @@ export async function askOpenClaw(question: string): Promise<string> {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ message: question, sessionId }),
+    body: JSON.stringify({ message: enrichedMessage, sessionId }),
     signal: AbortSignal.timeout(120000),
   });
 
