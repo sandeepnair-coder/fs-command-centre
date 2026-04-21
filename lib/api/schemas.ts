@@ -106,6 +106,7 @@ export const UpdateTaskSchema = z.object({
     column: z.string().max(100).optional(),
     client_id: z.string().uuid().nullable().optional(),
     is_completed: z.boolean().optional(),
+    task_type: z.enum(["paid", "free"]).optional(),
   }),
   agent_run_id: z.string().max(200).optional(),
 }).refine(d => d.task_id || d.task_title || d.source_message_id, { message: "task_id, task_title, or source_message_id required" });

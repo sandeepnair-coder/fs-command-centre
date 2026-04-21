@@ -158,8 +158,8 @@ export async function updateTaskByAgent(input: UpdateTaskInput) {
       await validateClientId(input.updates.client_id);
       updates.client_id = input.updates.client_id;
     }
-    // client_id cannot be set to null — client is required
   }
+  if (input.updates.task_type) updates.task_type = input.updates.task_type;
 
   const { data: updated, error } = await supabase.from("tasks").update(updates).eq("id", taskId).select("id, title, priority, due_date, cost, column_id, is_completed").single();
   if (error) throw error;

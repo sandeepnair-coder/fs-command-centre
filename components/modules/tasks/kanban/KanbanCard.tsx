@@ -181,6 +181,16 @@ export function KanbanCard({
         )}>
           {task.title}
         </p>
+        {task.task_type === "paid" && (
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
+                <IndianRupee className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">Paid task</TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       {/* Subtask progress bar */}

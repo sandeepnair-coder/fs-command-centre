@@ -829,6 +829,59 @@ function ClientField({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TASK TYPE FIELD (paid / free)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function TaskTypeField({
+  task,
+  onChanged,
+}: {
+  task: Task;
+  onChanged: (updates: Partial<Task>) => void;
+}) {
+  const current = task.task_type || "free";
+
+  async function handleChange(value: "paid" | "free") {
+    onChanged({ task_type: value });
+    try {
+      await updateTask(task.id, { task_type: value });
+    } catch {
+      toast.error("Task type didn't save — try again.");
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <label
+        className={cn(
+          "flex items-center gap-1.5 cursor-pointer rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors border",
+          current === "paid"
+            ? "bg-emerald-50 border-emerald-300 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-700 dark:text-emerald-300"
+            : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/60"
+        )}
+        onClick={() => handleChange("paid")}
+      >
+        <input type="radio" name={`task-type-${task.id}`} value="paid" checked={current === "paid"} onChange={() => handleChange("paid")} className="sr-only" />
+        <IndianRupee className="size-3" />
+        Paid
+      </label>
+      <label
+        className={cn(
+          "flex items-center gap-1.5 cursor-pointer rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors border",
+          current === "free"
+            ? "bg-sky-50 border-sky-300 text-sky-700 dark:bg-sky-950/40 dark:border-sky-700 dark:text-sky-300"
+            : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/60"
+        )}
+        onClick={() => handleChange("free")}
+      >
+        <input type="radio" name={`task-type-${task.id}`} value="free" checked={current === "free"} onChange={() => handleChange("free")} className="sr-only" />
+        Free
+      </label>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // TITLE EDITOR
 // ═══════════════════════════════════════════════════════════════════════════════
 
