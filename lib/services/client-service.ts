@@ -16,6 +16,15 @@ async function audit(event: string, entityType: string, entityId: string, agentR
   });
 }
 
+function triggerAutoEnrichment(clientId: string, name: string, email?: string | null, website?: string | null) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
+  fetch(`${appUrl}/api/clients/enrich`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ client_id: clientId, name, email: email || undefined, website: website || undefined }),
+  }).catch(() => { /* enrichment is best-effort */ });
+}
+
 // ─── Upsert client ──────────────────────────────────────────────────────────
 
 export async function upsertClient(input: UpsertClientInput) {
@@ -57,6 +66,10 @@ export async function upsertClient(input: UpsertClientInput) {
   const result = { client: newClient, created: true, message: `Client "${newClient.name}" created` };
   if (input.idempotency_key) await supabase.from("idempotency_keys").insert({ key: input.idempotency_key, entity_type: "client", entity_id: newClient.id, response_json: result });
   await audit("client_created_by_agent", "client", newClient.id, input.agent_run_id);
+
+  // Fire-and-forget: trigger auto-enrichment for new clients
+  triggerAutoEnrichment(newClient.id, newClient.name, newClient.primary_email, newClient.website);
+
   return result;
 }
 

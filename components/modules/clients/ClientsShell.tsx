@@ -73,7 +73,7 @@ import type { Client, BrandAsset } from "@/lib/types/comms";
 import { toast } from "sonner";
 import { SUCCESS, EMPTY } from "@/lib/copy";
 
-function triggerEnrichment(client: { id: string; name: string; primary_email?: string | null; website?: string | null }) {
+function triggerEnrichment(client: { id: string; name: string; primary_email?: string | null; website?: string | null }, onDone?: () => void) {
   fetch("/api/clients/enrich", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -87,9 +87,13 @@ function triggerEnrichment(client: { id: string; name: string; primary_email?: s
     .then((r) => r.json())
     .then((data) => {
       if (data.enriched > 0) {
-        toast.success("Client data updated", {
-          description: `${data.enriched} intel fact${data.enriched > 1 ? "s" : ""} discovered and added.`,
+        const parts: string[] = [];
+        if (data.fields_updated?.length) parts.push(`${data.fields_updated.length} profile field${data.fields_updated.length > 1 ? "s" : ""}`);
+        if (data.facts_written > 0) parts.push(`${data.facts_written} intel fact${data.facts_written > 1 ? "s" : ""}`);
+        toast.success("Auto-enrichment complete", {
+          description: `Discovered ${parts.join(" and ")} from ${(data.sources_checked || []).join(", ")}.`,
         });
+        onDone?.();
       }
     })
     .catch(() => {
@@ -288,7 +292,7 @@ export function ClientsShell({ initialClients = [] }: { initialClients?: ClientS
       resetForm();
       loadClients();
       // Fire-and-forget deep research
-      triggerEnrichment(client);
+      triggerEnrichment(client, loadClients);
     } catch {
       toast.error("Couldn't create the client. Try again?");
     } finally {
@@ -375,7 +379,7 @@ export function ClientsShell({ initialClients = [] }: { initialClients?: ClientS
       setAdvancedOpen(false);
       resetForm();
       // Fire-and-forget deep research
-      triggerEnrichment(client);
+      triggerEnrichment(client, loadClients);
       // Navigate to the new client profile
       router.push(`/clients/${client.id}`);
     } catch {
