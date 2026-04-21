@@ -527,24 +527,6 @@ export function TaskSheet({
                   )}
                 </SidebarField>
 
-                <SidebarField icon={IndianRupee} label="Cost (₹)">
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0"
-                    value={detail.cost ?? ""}
-                    onChange={async (e) => {
-                      const num = e.target.value ? parseFloat(e.target.value) : null;
-                      handleFieldChange({ cost: num });
-                    }}
-                    onBlur={async (e) => {
-                      const num = e.target.value ? parseFloat(e.target.value) : null;
-                      try { await updateTask(detail.id, { cost: num }); } catch { toast.error("Cost didn't save — try again."); }
-                    }}
-                    className="h-8 text-sm bg-muted/50 border-border/50"
-                  />
-                </SidebarField>
                 </div>
 
                 {/* Group 3: Client, Tags */}
@@ -559,10 +541,13 @@ export function TaskSheet({
                   </p>
                   <TagPicker taskId={detail.id} tags={taskTags} onTagsChange={setTaskTags} />
                 </div>
+                </div>
 
+                {/* Group 4: Task Type */}
+                <div className="rounded-xl border bg-card p-1">
                 <div className="py-2.5 px-3">
                   <p className="text-[11px] font-medium text-foreground/60 mb-1.5 flex items-center gap-1.5">
-                    <IndianRupee className="size-3.5" /> Task Type
+                    Task Type
                   </p>
                   <TaskTypeField task={detail} onChanged={handleFieldChange} />
                 </div>
@@ -851,30 +836,23 @@ function TaskTypeField({
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <label
-        className={cn(
-          "flex items-center gap-1.5 cursor-pointer rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors border",
-          current === "paid"
-            ? "bg-emerald-50 border-emerald-300 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-700 dark:text-emerald-300"
-            : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/60"
-        )}
-        onClick={() => handleChange("paid")}
-      >
-        <input type="radio" name={`task-type-${task.id}`} value="paid" checked={current === "paid"} onChange={() => handleChange("paid")} className="sr-only" />
-        <IndianRupee className="size-3" />
+    <div className="flex items-center gap-4">
+      <label className="flex items-center gap-2 cursor-pointer text-xs font-medium" onClick={() => handleChange("paid")}>
+        <span className={cn(
+          "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-colors",
+          current === "paid" ? "border-primary" : "border-muted-foreground/40"
+        )}>
+          {current === "paid" && <span className="h-2 w-2 rounded-full bg-primary" />}
+        </span>
         Paid
       </label>
-      <label
-        className={cn(
-          "flex items-center gap-1.5 cursor-pointer rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors border",
-          current === "free"
-            ? "bg-sky-50 border-sky-300 text-sky-700 dark:bg-sky-950/40 dark:border-sky-700 dark:text-sky-300"
-            : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/60"
-        )}
-        onClick={() => handleChange("free")}
-      >
-        <input type="radio" name={`task-type-${task.id}`} value="free" checked={current === "free"} onChange={() => handleChange("free")} className="sr-only" />
+      <label className="flex items-center gap-2 cursor-pointer text-xs font-medium" onClick={() => handleChange("free")}>
+        <span className={cn(
+          "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-colors",
+          current === "free" ? "border-primary" : "border-muted-foreground/40"
+        )}>
+          {current === "free" && <span className="h-2 w-2 rounded-full bg-primary" />}
+        </span>
         Free
       </label>
     </div>

@@ -9,7 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Calendar, IndianRupee, MessageSquare, Paperclip, UserCircle, Clock, CheckCircle2, Link2, Workflow } from "lucide-react";
+import { Calendar, DollarSign, MessageSquare, Paperclip, UserCircle, Clock, CheckCircle2, Link2, Workflow } from "lucide-react";
 import type { Task, Subtask } from "@/lib/types/tasks";
 import { getAvatarColor, getInitials } from "@/lib/utils/avatar";
 import { cn } from "@/lib/utils";
@@ -185,7 +185,7 @@ export function KanbanCard({
           <Tooltip delayDuration={0}>
             <TooltipTrigger asChild>
               <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
-                <IndianRupee className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400" />
+                <DollarSign className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400" />
               </span>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-xs">Paid task</TooltipContent>
