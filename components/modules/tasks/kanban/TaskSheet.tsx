@@ -568,42 +568,7 @@ export function TaskSheet({
                 </div>
                 </div>
 
-                {/* Group 4: Work Stream */}
-                <div className="rounded-xl border bg-card p-1">
-                <SidebarField icon={Workflow} label="Work Stream">
-                  <p className="text-xs text-muted-foreground/60 italic">
-                    {detail.work_stream_name || "No work stream assigned"}
-                  </p>
-                </SidebarField>
-                </div>
-
-                {/* Group 5: Dependencies */}
-                <div className="rounded-xl border bg-card p-1">
-                <div className="py-2.5 px-3">
-                  <p className="text-[11px] font-medium text-foreground/60 mb-1.5">Dependencies</p>
-                  <DependencySection taskId={detail.id} projectId={detail.project_id} />
-                </div>
-                </div>
-
-                {/* Group 6: Related Work */}
-                <div className="rounded-xl border bg-card p-1">
-                <div className="py-2.5 px-3">
-                  <p className="text-[11px] font-medium text-foreground/60 mb-1.5 flex items-center gap-1.5">
-                    <GitBranch className="size-3.5" /> Related Work
-                  </p>
-                  {(detail.relations_count ?? 0) > 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      {detail.relations_count} related card{(detail.relations_count ?? 0) !== 1 ? "s" : ""}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground/60 italic">
-                      No related cards yet. Link cards to build work history.
-                    </p>
-                  )}
-                </div>
-                </div>
-
-                {/* Group 5: Meta (read-only) */}
+                {/* Meta (read-only) */}
                 <div className="rounded-xl border bg-card p-3">
                   <div className="flex items-center gap-1.5 text-[11px] text-foreground/50">
                     <Clock className="h-3.5 w-3.5" />
