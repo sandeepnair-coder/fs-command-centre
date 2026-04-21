@@ -116,7 +116,7 @@ export async function getColumns(projectId: string) {
       .order("position"),
     supabase
       .from("tasks")
-      .select("id, project_id, column_id, client_id, work_stream_id, title, description, priority, due_date, cost, position, created_by, created_from_message_id, created_from_conversation_id, created_at, updated_at, manager_id")
+      .select("id, project_id, column_id, client_id, work_stream_id, title, description, priority, due_date, cost, position, created_by, created_from_message_id, created_from_conversation_id, created_at, updated_at, manager_id, is_completed, completed_at")
       .eq("project_id", projectId)
       .order("position"),
     supabase
@@ -359,6 +359,14 @@ export async function moveTask(
     p_new_position: newPosition,
   });
   if (error) throw error;
+
+  const { data: col } = await supabase.from("project_columns").select("name").eq("id", newColumnId).single();
+  const colName = (col?.name || "").toLowerCase();
+  const isDone = colName.includes("done") || colName.includes("approved") || colName.includes("completed") || colName.includes("closed");
+  await supabase.from("tasks").update({
+    is_completed: isDone,
+    completed_at: isDone ? new Date().toISOString() : null,
+  }).eq("id", taskId);
 }
 
 // ─── Task Detail ─────────────────────────────────────────────────────────────
@@ -368,7 +376,7 @@ export async function getTaskDetail(taskId: string) {
 
   // Single wave — all 7 queries in parallel
   const [taskRes, assigneesRes, membersRes, commentsRes, attachmentsRes, linksRes, tagsRes, outputsRes] = await Promise.all([
-    supabase.from("tasks").select("id, project_id, column_id, client_id, work_stream_id, title, description, priority, due_date, cost, position, created_by, created_from_message_id, created_from_conversation_id, created_at, updated_at, manager_id").eq("id", taskId).single(),
+    supabase.from("tasks").select("id, project_id, column_id, client_id, work_stream_id, title, description, priority, due_date, cost, position, created_by, created_from_message_id, created_from_conversation_id, created_at, updated_at, manager_id, is_completed, completed_at").eq("id", taskId).single(),
     supabase.from("task_assignees").select("task_id, user_id").eq("task_id", taskId),
     supabase.from("members").select("id, full_name, avatar_url, clerk_id"),
     supabase.from("task_comments").select("id, task_id, author_id, body, created_at").eq("task_id", taskId).order("created_at").limit(100),

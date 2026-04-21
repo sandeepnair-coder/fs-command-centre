@@ -117,7 +117,7 @@ export function KanbanCard({
       onClick={onClick}
       className={cn(
         "cursor-pointer rounded-lg border border-border/60 bg-card p-3 shadow-md transition-shadow hover:shadow-lg dark:shadow-black/40 dark:hover:shadow-black/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
-        deadlineBorderStyles[deadlineStatus],
+        !isCompleted && deadlineBorderStyles[deadlineStatus],
         isCompleted && "opacity-60"
       )}
     >
@@ -138,12 +138,12 @@ export function KanbanCard({
           {!task.client_name && !task.work_stream_name && <span />}
         </div>
 
-        {deadlineStatus === "overdue" && (
+        {deadlineStatus === "overdue" && !isCompleted && (
           <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
             Overdue
           </Badge>
         )}
-        {deadlineStatus === "due_soon" && (
+        {deadlineStatus === "due_soon" && !isCompleted && (
           <Badge className="text-[10px] px-1.5 py-0 h-4 shrink-0 bg-amber-500 text-white hover:bg-amber-600">
             Due Soon
           </Badge>
@@ -220,9 +220,9 @@ export function KanbanCard({
           <span
             className={cn(
               "flex items-center gap-0.5 text-xs",
-              deadlineStatus === "overdue"
+              deadlineStatus === "overdue" && !isCompleted
                 ? "text-red-600 dark:text-red-400 font-medium"
-                : deadlineStatus === "due_soon"
+                : deadlineStatus === "due_soon" && !isCompleted
                   ? "text-amber-600 dark:text-amber-400 font-medium"
                   : "text-muted-foreground"
             )}

@@ -180,10 +180,18 @@ export async function moveTaskByAgent(input: MoveTaskInput) {
   const colId = await resolveColumnId(task.project_id, input.column);
   if (!colId) throw new Error(`Column "${input.column}" not found`);
 
-  const { data: lastTask } = await supabase.from("tasks").select("position").eq("column_id", colId).order("position", { ascending: false }).limit(1);
-  await supabase.from("tasks").update({ column_id: colId, position: (lastTask?.[0]?.position || 0) + 1000 }).eq("id", taskId);
-
   const { data: col } = await supabase.from("project_columns").select("name").eq("id", colId).single();
+  const colNameLower = (col?.name || "").toLowerCase();
+  const isDoneColumn = colNameLower.includes("done") || colNameLower.includes("approved") || colNameLower.includes("completed") || colNameLower.includes("closed");
+
+  const { data: lastTask } = await supabase.from("tasks").select("position").eq("column_id", colId).order("position", { ascending: false }).limit(1);
+  await supabase.from("tasks").update({
+    column_id: colId,
+    position: (lastTask?.[0]?.position || 0) + 1000,
+    is_completed: isDoneColumn,
+    completed_at: isDoneColumn ? new Date().toISOString() : null,
+  }).eq("id", taskId);
+
   await audit("task_moved_by_agent", "task", taskId, input.agent_run_id, { to_column: col?.name });
   return { task_id: taskId, title: task.title, column: col?.name, message: `"${task.title}" moved to ${col?.name}` };
 }

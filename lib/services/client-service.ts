@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { UpsertClientInput, UpdateClientInput, AddClientContactInput, AddClientFactInput, SearchClientsInput, GetClientProfileInput, CreateWorkStreamInput, ManageColumnsInput, ListMembersInput } from "@/lib/api/schemas";
+import type { UpsertClientInput, UpdateClientInput, AddClientContactInput, AddClientFactInput, SearchClientsInput, GetClientProfileInput, GetClientTasksInput, CreateWorkStreamInput, ManageColumnsInput, ListMembersInput } from "@/lib/api/schemas";
 
 async function validateClientId(clientId: string) {
   const supabase = await createClient();
@@ -142,6 +142,59 @@ export async function getClientProfile(input: GetClientProfileInput) {
   }
 
   return { client, contacts, facts, projects };
+}
+
+// ─── Get client tasks ──────────────────────────────────────────────────────
+
+export async function getClientTasks(input: GetClientTasksInput) {
+  const supabase = await createClient();
+
+  let clientId = input.client_id;
+  let clientName: string | null = null;
+
+  if (!clientId && input.client_name) {
+    const { data } = await supabase.from("clients").select("id, name").ilike("name", `%${input.client_name}%`).limit(1);
+    if (!data?.[0]) throw new Error(`Client "${input.client_name}" not found. Use search-clients to find the correct name.`);
+    clientId = data[0].id;
+    clientName = data[0].name;
+  }
+  if (!clientId) throw new Error("client_id or client_name required");
+  if (!clientName) {
+    const { data } = await supabase.from("clients").select("name").eq("id", clientId).single();
+    clientName = data?.name || null;
+  }
+
+  const { data: tasks, error } = await supabase
+    .from("tasks")
+    .select("id, title, priority, due_date, is_completed, column_id, project_id, project_columns(name), projects(name)")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false })
+    .limit(input.limit);
+  if (error) throw error;
+
+  const formatted = (tasks || []).map((t) => ({
+    id: t.id,
+    title: t.title,
+    priority: t.priority,
+    due_date: t.due_date,
+    is_completed: t.is_completed,
+    column: (t.project_columns as unknown as { name: string })?.name || "Unknown",
+    project: (t.projects as unknown as { name: string })?.name || "Unknown",
+  }));
+
+  const completed = formatted.filter(t => t.is_completed).length;
+  const today = new Date().toISOString().slice(0, 10);
+  const overdue = formatted.filter(t => t.due_date && t.due_date < today && !t.is_completed).length;
+
+  return {
+    client_id: clientId,
+    client_name: clientName,
+    total: formatted.length,
+    completed,
+    pending: formatted.length - completed,
+    overdue,
+    tasks: formatted,
+  };
 }
 
 // ─── Create work stream ─────────────────────────────────────────────────────

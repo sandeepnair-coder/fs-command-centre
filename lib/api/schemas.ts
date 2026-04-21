@@ -237,6 +237,13 @@ export const GetClientProfileSchema = z.object({
 });
 export type GetClientProfileInput = z.infer<typeof GetClientProfileSchema>;
 
+export const GetClientTasksSchema = z.object({
+  client_id: z.string().uuid().optional(),
+  client_name: z.string().max(200).optional(),
+  limit: z.number().int().min(1).max(100).default(50),
+}).refine(d => d.client_id || d.client_name, { message: "Either client_id or client_name required" });
+export type GetClientTasksInput = z.infer<typeof GetClientTasksSchema>;
+
 // ═════════════════════════════════════════════════════════════════════════════
 // WORK STREAM TOOLS
 // ═════════════════════════════════════════════════════════════════════════════

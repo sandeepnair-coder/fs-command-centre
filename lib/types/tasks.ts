@@ -29,6 +29,8 @@ export type Task = {
   created_at: string;
   updated_at: string;
   manager_id: string | null;
+  is_completed?: boolean;
+  completed_at?: string | null;
   assignees?: TaskAssignee[];
   client_name?: string | null;
   manager_name?: string | null;

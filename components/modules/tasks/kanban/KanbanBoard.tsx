@@ -102,7 +102,9 @@ export function KanbanBoard({
       const [movedTask] = sourceTasks.splice(taskIdx, 1);
       const overIdx = destTasks.findIndex((t) => t.id === overId);
       const insertIdx = overIdx >= 0 ? overIdx : destTasks.length;
-      destTasks.splice(insertIdx, 0, { ...movedTask, column_id: overCol.id });
+      const destColName = (overCol.name || "").toLowerCase();
+      const isDone = destColName.includes("done") || destColName.includes("approved") || destColName.includes("completed") || destColName.includes("closed");
+      destTasks.splice(insertIdx, 0, { ...movedTask, column_id: overCol.id, is_completed: isDone });
 
       return prev.map((c) => {
         if (c.id === sourceCol.id) return { ...c, tasks: sourceTasks };
