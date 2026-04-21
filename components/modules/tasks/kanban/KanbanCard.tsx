@@ -151,6 +151,9 @@ export function KanbanCard({
         {deadlineStatus === "due_week" && (
           <span className="h-2 w-2 rounded-full bg-yellow-400 shrink-0" />
         )}
+        {task.task_type === "paid" && (
+          <DollarSign className="h-3.5 w-3.5 shrink-0 text-foreground/70" />
+        )}
       </div>
 
       <div className="flex items-start gap-1.5">
@@ -181,9 +184,6 @@ export function KanbanCard({
         )}>
           {task.title}
         </p>
-        {task.task_type === "paid" && (
-          <DollarSign className="mt-0.5 h-4 w-4 shrink-0 text-foreground/70" />
-        )}
       </div>
 
       {/* Subtask progress bar */}
