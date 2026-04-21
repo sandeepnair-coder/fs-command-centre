@@ -60,13 +60,13 @@ function NavLink({
           prefetch={true}
           onMouseEnter={handleMouseEnter}
           className={cn(
-            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
             active
-              ? "bg-primary/10 text-foreground font-medium border-l-2 border-l-primary"
-              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground border-l-2 border-l-transparent"
+              ? "bg-primary text-primary-foreground font-medium shadow-sm"
+              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
           )}
         >
-          <Icon className={cn("h-4 w-4 shrink-0", active && "text-primary")} />
+          <Icon className={cn("h-4 w-4 shrink-0", active && "text-primary-foreground")} />
           <span className="truncate">{label}</span>
         </Link>
       </TooltipTrigger>
