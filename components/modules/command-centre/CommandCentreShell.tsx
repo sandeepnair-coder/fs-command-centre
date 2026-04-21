@@ -40,9 +40,9 @@ import type {
 type Props = {
   metrics: SnapshotMetrics;
   criticalItems: CriticalItem[];
-  potentialClients: PotentialClient[];
-  opportunities: OpportunityInsight[];
-  recentComms: RecentComm[];
+  potentialClients?: PotentialClient[];
+  opportunities?: OpportunityInsight[];
+  recentComms?: RecentComm[];
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -81,9 +81,6 @@ const ITEM_TYPE_LABEL: Record<string, string> = {
 export function CommandCentreShell({
   metrics,
   criticalItems,
-  potentialClients,
-  opportunities,
-  recentComms,
 }: Props) {
   return (
     <div className="flex h-full gap-4 overflow-hidden">
@@ -92,11 +89,6 @@ export function CommandCentreShell({
         <div className="space-y-6 pr-4 pb-8">
           <MetricsRow metrics={metrics} />
           <CriticalItemsFeed items={criticalItems} />
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <PotentialClientsCard clients={potentialClients} />
-            <OpportunitiesCard opportunities={opportunities} />
-          </div>
-          <RecentCommsCard comms={recentComms} />
         </div>
       </ScrollArea>
 
