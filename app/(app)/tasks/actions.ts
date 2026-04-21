@@ -712,6 +712,16 @@ export async function deleteSubtask(subtaskId: string) {
   if (error) throw error;
 }
 
+export async function reorderSubtasks(orderedIds: string[]) {
+  const supabase = await createClient();
+  const updates = orderedIds.map((id, i) =>
+    supabase.from("subtasks").update({ position: i * 1000 }).eq("id", id)
+  );
+  const results = await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
+}
+
 // ─── Column Swap ────────────────────────────────────────────────────────────
 
 export async function swapColumnPositions(

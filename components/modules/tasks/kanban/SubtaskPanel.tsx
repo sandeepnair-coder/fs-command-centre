@@ -11,8 +11,128 @@ import {
   createSubtask,
   updateSubtaskAction,
   deleteSubtask,
+  reorderSubtasks,
 } from "@/app/(app)/tasks/actions";
 import { cn } from "@/lib/utils";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+function SortableSubtaskItem({
+  subtask,
+  onToggle,
+  onRemove,
+  onEditStart,
+  editingId,
+  editValue,
+  onEditChange,
+  onEditSave,
+  onEditCancel,
+}: {
+  subtask: Subtask;
+  onToggle: (id: string) => void;
+  onRemove: (id: string) => void;
+  onEditStart: (id: string, title: string) => void;
+  editingId: string | null;
+  editValue: string;
+  onEditChange: (v: string) => void;
+  onEditSave: (id: string) => void;
+  onEditCancel: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: subtask.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "flex items-center gap-2 group rounded-md px-1 py-1 hover:bg-muted/50",
+        isDragging && "opacity-50 bg-muted/50 z-50"
+      )}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing touch-none shrink-0"
+        aria-label="Drag to reorder"
+      >
+        <GripVertical className="h-3 w-3 text-muted-foreground/30" />
+      </button>
+      <button
+        onClick={() => onToggle(subtask.id)}
+        className={cn(
+          "h-4 w-4 rounded border shrink-0 flex items-center justify-center transition-colors",
+          subtask.completed
+            ? "bg-primary border-primary text-primary-foreground"
+            : "border-border hover:border-primary"
+        )}
+        aria-label={subtask.completed ? "Mark incomplete" : "Mark complete"}
+      >
+        {subtask.completed && (
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M2 5L4 7L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </button>
+
+      {editingId === subtask.id ? (
+        <Input
+          value={editValue}
+          onChange={(e) => onEditChange(e.target.value)}
+          onBlur={() => onEditSave(subtask.id)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onEditSave(subtask.id);
+            if (e.key === "Escape") onEditCancel();
+          }}
+          className="h-6 text-sm flex-1"
+          autoFocus
+        />
+      ) : (
+        <span
+          className={cn(
+            "text-sm flex-1 cursor-pointer",
+            subtask.completed && "line-through text-muted-foreground"
+          )}
+          onDoubleClick={() => onEditStart(subtask.id, subtask.title)}
+        >
+          {subtask.title}
+        </span>
+      )}
+
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
+        onClick={() => onRemove(subtask.id)}
+      >
+        <Trash2 className="h-3 w-3 text-muted-foreground" />
+      </Button>
+    </div>
+  );
+}
 
 export function SubtaskPanel({
   taskId,
@@ -27,6 +147,10 @@ export function SubtaskPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
   const completed = subtasks.filter((s) => s.completed).length;
   const total = subtasks.length;
   const percent = total > 0 ? (completed / total) * 100 : 0;
@@ -35,14 +159,12 @@ export function SubtaskPanel({
     const trimmed = newTitle.trim();
     if (!trimmed) return;
     setNewTitle("");
-    // Optimistic update
     const tempId = `temp-${Date.now()}`;
     onUpdate([...subtasks, { id: tempId, title: trimmed, completed: false }]);
     try {
       const created = await createSubtask(taskId, trimmed);
       onUpdate([...subtasks, { id: created.id, title: created.title, completed: created.completed }]);
     } catch {
-      // Revert on failure
       onUpdate(subtasks);
     }
   }
@@ -87,6 +209,26 @@ export function SubtaskPanel({
     }
   }
 
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = subtasks.findIndex((s) => s.id === active.id);
+    const newIndex = subtasks.findIndex((s) => s.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = [...subtasks];
+    const [moved] = reordered.splice(oldIndex, 1);
+    reordered.splice(newIndex, 0, moved);
+
+    onUpdate(reordered);
+    try {
+      await reorderSubtasks(reordered.map((s) => s.id));
+    } catch {
+      onUpdate(subtasks);
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -110,68 +252,33 @@ export function SubtaskPanel({
         />
       )}
 
-      <div className="space-y-1">
-        {subtasks.map((subtask) => (
-          <div
-            key={subtask.id}
-            className="flex items-center gap-2 group rounded-md px-1 py-1 hover:bg-muted/50"
-          >
-            <GripVertical className="h-3 w-3 text-muted-foreground/30 shrink-0" />
-            <button
-              onClick={() => handleToggle(subtask.id)}
-              className={cn(
-                "h-4 w-4 rounded border shrink-0 flex items-center justify-center transition-colors",
-                subtask.completed
-                  ? "bg-primary border-primary text-primary-foreground"
-                  : "border-border hover:border-primary"
-              )}
-              aria-label={subtask.completed ? "Mark incomplete" : "Mark complete"}
-            >
-              {subtask.completed && (
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path d="M2 5L4 7L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
-            </button>
-
-            {editingId === subtask.id ? (
-              <Input
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onBlur={() => handleEditSave(subtask.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleEditSave(subtask.id);
-                  if (e.key === "Escape") setEditingId(null);
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={subtasks.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-1">
+            {subtasks.map((subtask) => (
+              <SortableSubtaskItem
+                key={subtask.id}
+                subtask={subtask}
+                onToggle={handleToggle}
+                onRemove={handleRemove}
+                onEditStart={(id, title) => {
+                  setEditingId(id);
+                  setEditValue(title);
                 }}
-                className="h-6 text-sm flex-1"
-                autoFocus
+                editingId={editingId}
+                editValue={editValue}
+                onEditChange={setEditValue}
+                onEditSave={handleEditSave}
+                onEditCancel={() => setEditingId(null)}
               />
-            ) : (
-              <span
-                className={cn(
-                  "text-sm flex-1 cursor-pointer",
-                  subtask.completed && "line-through text-muted-foreground"
-                )}
-                onDoubleClick={() => {
-                  setEditingId(subtask.id);
-                  setEditValue(subtask.title);
-                }}
-              >
-                {subtask.title}
-              </span>
-            )}
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
-              onClick={() => handleRemove(subtask.id)}
-            >
-              <Trash2 className="h-3 w-3 text-muted-foreground" />
-            </Button>
+            ))}
           </div>
-        ))}
-      </div>
+        </SortableContext>
+      </DndContext>
 
       <Separator />
 
