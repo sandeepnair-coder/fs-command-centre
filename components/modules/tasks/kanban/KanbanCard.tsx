@@ -210,13 +210,6 @@ export function KanbanCard({
       )}
 
       <div className="mt-2 flex items-center gap-2 flex-wrap">
-        {task.cost != null && (
-          <span className="flex items-center gap-0.5 text-xs text-muted-foreground font-medium">
-            <IndianRupee className="h-3.5 w-3.5" />
-            {task.cost.toLocaleString("en-IN")}
-          </span>
-        )}
-
         {task.priority && task.priority !== "low" && (
           <Badge
             variant="secondary"

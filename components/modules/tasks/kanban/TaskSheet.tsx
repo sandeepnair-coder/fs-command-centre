@@ -61,7 +61,6 @@ import {
   Pencil,
   MoreHorizontal,
   Calendar,
-  IndianRupee,
   User,
   UserCog,
   Flag,
