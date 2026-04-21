@@ -147,9 +147,13 @@ export function KanbanBoard({
     );
 
     const prevColumns = columns;
-    moveTask(activeId, destCol.id, newPosition).catch(() => {
+    moveTask(activeId, destCol.id, newPosition).catch((err: Error) => {
       setColumns(prevColumns);
-      toast.error("Drag didn't stick. Try moving it again.");
+      if (err.message?.includes("Final Output")) {
+        toast.error("Final Output required", { description: err.message });
+      } else {
+        toast.error("Drag didn't stick. Try moving it again.");
+      }
     });
   }
 

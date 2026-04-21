@@ -58,6 +58,7 @@ import {
   CreditCard,
   Download,
   ImageIcon,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -537,7 +538,7 @@ export function ClientProfile({ client: initial }: { client: Client }) {
           <TabsTrigger value="contacts" className="gap-1 text-xs"><User className="size-3" /> Contacts</TabsTrigger>
           <TabsTrigger value="brand" className="gap-1 text-xs"><Palette className="size-3" /> Brand & Web</TabsTrigger>
           <TabsTrigger value="assets" className="gap-1 text-xs"><FileText className="size-3" /> Assets</TabsTrigger>
-          <TabsTrigger value="outputs" className="gap-1 text-xs"><ImageIcon className="size-3" /> Outputs</TabsTrigger>
+          <TabsTrigger value="outputs" className="gap-1 text-xs"><ImageIcon className="size-3" /> Final Outputs</TabsTrigger>
           <TabsTrigger value="intelligence" className="gap-1 text-xs"><Brain className="size-3" /> Intelligence</TabsTrigger>
           <TabsTrigger value="activity" className="gap-1 text-xs"><Activity className="size-3" /> Activity Log</TabsTrigger>
           <TabsTrigger value="billing" className="gap-1 text-xs"><Receipt className="size-3" /> Billing & Tax</TabsTrigger>
@@ -844,12 +845,12 @@ export function ClientProfile({ client: initial }: { client: Client }) {
             </ScrollArea>
           </TabsContent>
 
-          {/* ─── Outputs ─── */}
+          {/* ─── Final Outputs ─── */}
           <TabsContent value="outputs" className="h-full mt-0">
             <ScrollArea className="h-full">
               <div className="space-y-3 pb-4">
-                <p className="text-sm font-medium">Outputs</p>
-                <p className="text-xs text-muted-foreground">Deliverables uploaded from task cards linked to this client.</p>
+                <p className="text-sm font-medium">Final Outputs</p>
+                <p className="text-xs text-muted-foreground">Output links and deliverables from task cards linked to this client.</p>
                 <ClientOutputsGrid clientId={client.id} />
               </div>
             </ScrollArea>
@@ -1044,34 +1045,60 @@ function FactCard({
   );
 }
 
-// ─── Client Outputs Grid ────────────────────────────────────────────────────
+// ─── Client Final Outputs Grid ──────────────────────────────────────────────
+
+type ClientOutputLink = { id: string; task_id: string; url: string; label: string | null; created_at: string; task_name: string; type: "link" };
+type ClientOutputUpload = { id: string; task_id: string; url: string; file_name: string; created_at: string; task_name: string; type: "upload" };
 
 function ClientOutputsGrid({ clientId }: { clientId: string }) {
-  const [outputs, setOutputs] = useState<{ id: string; file_name: string; url: string; created_at: string }[]>([]);
+  const [links, setLinks] = useState<ClientOutputLink[]>([]);
+  const [uploads, setUploads] = useState<ClientOutputUpload[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     getOutputsByClient(clientId)
-      .then((data) => setOutputs(data))
-      .catch(() => setOutputs([]))
+      .then((data) => { setLinks(data.links || []); setUploads(data.uploads || []); })
+      .catch(() => { setLinks([]); setUploads([]); })
       .finally(() => setLoading(false));
   }, [clientId]);
 
-  if (loading) return <div className="grid grid-cols-3 gap-2">{[1,2,3].map((i) => <div key={i} className="h-28 rounded-lg bg-muted animate-pulse" />)}</div>;
-  if (outputs.length === 0) return <p className="text-xs text-muted-foreground/60 italic">No outputs yet. Upload outputs from task cards to see them here.</p>;
+  if (loading) return <div className="space-y-2">{[1,2,3].map((i) => <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" />)}</div>;
+  if (links.length === 0 && uploads.length === 0) return <p className="text-xs text-muted-foreground/60 italic">No final outputs yet. Add output links from task cards to see them here.</p>;
+
+  const grouped: Record<string, { task_name: string; items: (ClientOutputLink | ClientOutputUpload)[] }> = {};
+  for (const l of links) {
+    if (!grouped[l.task_id]) grouped[l.task_id] = { task_name: l.task_name, items: [] };
+    grouped[l.task_id].items.push(l);
+  }
+  for (const u of uploads) {
+    if (!grouped[u.task_id]) grouped[u.task_id] = { task_name: u.task_name, items: [] };
+    grouped[u.task_id].items.push(u);
+  }
 
   return (
-    <div className="grid grid-cols-3 gap-2">
-      {outputs.map((out) => (
-        <div key={out.id} className="rounded-lg border border-emerald-200 dark:border-emerald-900/40 overflow-hidden">
-          {out.url ? (
-            <a href={out.url} target="_blank" rel="noopener noreferrer">
-              <img src={out.url} alt={out.file_name} className="h-28 w-full object-cover hover:scale-105 transition-transform" />
-            </a>
-          ) : (
-            <div className="flex h-28 items-center justify-center bg-muted text-xs text-muted-foreground">{out.file_name}</div>
-          )}
-          <p className="truncate px-2 py-1 text-[10px] text-muted-foreground">{out.file_name}</p>
+    <div className="space-y-4">
+      {Object.entries(grouped).map(([taskId, group]) => (
+        <div key={taskId} className="space-y-1.5">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{group.task_name}</p>
+          {group.items.map((item) => (
+            <div key={item.id} className="flex items-start gap-2 py-1">
+              {item.type === "link" ? (
+                <>
+                  <ExternalLink className="h-3 w-3 shrink-0 mt-1 text-emerald-600" />
+                  <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline break-all">
+                    {(item as ClientOutputLink).label || item.url}
+                  </a>
+                </>
+              ) : (
+                <>
+                  <ImageIcon className="h-3 w-3 shrink-0 mt-1 text-emerald-600" />
+                  <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline break-all">
+                    {(item as ClientOutputUpload).file_name}
+                  </a>
+                </>
+              )}
+            </div>
+          ))}
         </div>
       ))}
     </div>

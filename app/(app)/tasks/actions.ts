@@ -353,6 +353,18 @@ export async function moveTask(
   newPosition: number
 ) {
   const supabase = await createClient();
+
+  const { data: col } = await supabase.from("project_columns").select("name").eq("id", newColumnId).single();
+  const colName = (col?.name || "").toLowerCase();
+  const isDone = colName.includes("done") || colName.includes("approved") || colName.includes("completed") || colName.includes("closed");
+
+  if (isDone) {
+    const { count } = await supabase.from("task_links").select("id", { count: "exact", head: true }).eq("task_id", taskId);
+    if (!count || count === 0) {
+      throw new Error("Please add at least one Final Output link before marking this task as Done.");
+    }
+  }
+
   const { error } = await supabase.rpc("move_task", {
     p_task_id: taskId,
     p_new_column_id: newColumnId,
@@ -360,9 +372,6 @@ export async function moveTask(
   });
   if (error) throw error;
 
-  const { data: col } = await supabase.from("project_columns").select("name").eq("id", newColumnId).single();
-  const colName = (col?.name || "").toLowerCase();
-  const isDone = colName.includes("done") || colName.includes("approved") || colName.includes("completed") || colName.includes("closed");
   await supabase.from("tasks").update({
     is_completed: isDone,
     completed_at: isDone ? new Date().toISOString() : null,
@@ -620,28 +629,33 @@ export async function getOutputsByClient(clientId: string) {
   const supabase = await createClient();
   const { data: tasks } = await supabase
     .from("tasks")
-    .select("id")
+    .select("id, title")
     .eq("client_id", clientId);
-  if (!tasks || tasks.length === 0) return [];
+  if (!tasks || tasks.length === 0) return { links: [], uploads: [] };
 
   const taskIds = tasks.map((t) => t.id);
-  const { data: outputs, error } = await supabase
-    .from("task_outputs")
-    .select("id, task_id, storage_path, file_name, created_at")
-    .in("task_id", taskIds)
-    .order("created_at", { ascending: false })
-    .limit(50);
-  if (error) throw error;
+  const taskNameMap: Record<string, string> = {};
+  tasks.forEach((t) => { taskNameMap[t.id] = t.title; });
 
-  const withUrls = await Promise.all(
-    (outputs || []).map(async (o) => {
-      const { data: urlData } = await supabase.storage
-        .from("task-attachments")
-        .createSignedUrl(o.storage_path, 3600);
-      return { ...o, url: urlData?.signedUrl || "" };
+  const [linksRes, outputsRes] = await Promise.all([
+    supabase.from("task_links").select("id, task_id, url, label, created_at").in("task_id", taskIds).order("created_at", { ascending: false }).limit(100),
+    supabase.from("task_outputs").select("id, task_id, storage_path, file_name, created_at").in("task_id", taskIds).order("created_at", { ascending: false }).limit(50),
+  ]);
+
+  const links = (linksRes.data || []).map((l) => ({
+    ...l,
+    task_name: taskNameMap[l.task_id] || "Unknown task",
+    type: "link" as const,
+  }));
+
+  const uploads = await Promise.all(
+    (outputsRes.data || []).map(async (o) => {
+      const { data: urlData } = await supabase.storage.from("task-attachments").createSignedUrl(o.storage_path, 3600);
+      return { ...o, url: urlData?.signedUrl || "", task_name: taskNameMap[o.task_id] || "Unknown task", type: "upload" as const };
     })
   );
-  return withUrls;
+
+  return { links, uploads };
 }
 
 // ─── Links ───────────────────────────────────────────────────────────────────

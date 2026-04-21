@@ -371,48 +371,41 @@ export function TaskSheet({
                   />
                 </div>
 
-                {/* Outputs */}
-                <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-card p-4">
-                  <OutputsSection
-                    taskId={detail.id}
-                    outputs={detail.outputs || []}
-                    onAdded={(out) =>
-                      updateDetail((d) => ({
-                        ...d,
-                        outputs: [...(d.outputs || []), out],
-                      }))
-                    }
-                    onRemoved={(outId) =>
-                      updateDetail((d) => ({
-                        ...d,
-                        outputs: (d.outputs || []).filter((o) => o.id !== outId),
-                      }))
-                    }
-                  />
-                </div>
-
-                {/* Links */}
-                <div className="rounded-xl border bg-card p-4 relative">
+                {/* Final Outputs */}
+                <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-card p-4 relative">
                   {extrasLoading && detail.links.length === 0 && (
                     <div className="absolute inset-0 flex items-center justify-center bg-card/50 rounded-xl z-10">
                       <div className="h-4 w-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
                     </div>
                   )}
-                  <LinksSection
+                  <FinalOutputsSection
                     taskId={detail.id}
                     links={detail.links}
-                    onAdded={(link) =>
+                    outputs={detail.outputs || []}
+                    onLinkAdded={(link) =>
                       updateDetail((d) => ({
                         ...d,
                         links: [...d.links, link],
                         links_count: (d.links_count || 0) + 1,
                       }))
                     }
-                    onRemoved={(linkId) =>
+                    onLinkRemoved={(linkId) =>
                       updateDetail((d) => ({
                         ...d,
                         links: d.links.filter((l) => l.id !== linkId),
                         links_count: Math.max(0, (d.links_count || 0) - 1),
+                      }))
+                    }
+                    onOutputAdded={(out) =>
+                      updateDetail((d) => ({
+                        ...d,
+                        outputs: [...(d.outputs || []), out],
+                      }))
+                    }
+                    onOutputRemoved={(outId) =>
+                      updateDetail((d) => ({
+                        ...d,
+                        outputs: (d.outputs || []).filter((o) => o.id !== outId),
                       }))
                     }
                   />
@@ -947,9 +940,14 @@ function AttachmentsSection({ taskId, attachments, onAdded, onRemoved }: {
 // OUTPUTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function OutputsSection({ taskId, outputs, onAdded, onRemoved }: {
-  taskId: string; outputs: TaskAttachment[]; onAdded: (o: TaskAttachment) => void; onRemoved: (id: string) => void;
+function FinalOutputsSection({ taskId, links, outputs, onLinkAdded, onLinkRemoved, onOutputAdded, onOutputRemoved }: {
+  taskId: string; links: TaskLink[]; outputs: TaskAttachment[];
+  onLinkAdded: (l: TaskLink) => void; onLinkRemoved: (id: string) => void;
+  onOutputAdded: (o: TaskAttachment) => void; onOutputRemoved: (id: string) => void;
 }) {
+  const [adding, setAdding] = useState(false);
+  const [url, setUrl] = useState("");
+  const [label, setLabel] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -961,29 +959,63 @@ function OutputsSection({ taskId, outputs, onAdded, onRemoved }: {
       for (const file of Array.from(files)) {
         const fd = new FormData(); fd.set("file", file);
         const out = await uploadOutput(taskId, fd);
-        onAdded(out);
+        onOutputAdded(out);
       }
     } catch { toast.error("Upload didn't work — try again."); } finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   }
 
+  async function handleAddLink() {
+    if (!url.trim()) return;
+    try { const l = await addLink(taskId, url.trim(), label.trim()); onLinkAdded(l); setUrl(""); setLabel(""); setAdding(false); }
+    catch { toast.error("Link didn't save — try again."); }
+  }
+
+  const totalCount = links.length + outputs.length;
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <ImageIcon className="h-3 w-3" /> Outputs {outputs.length > 0 && `(${outputs.length})`}
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+          <ExternalLink className="h-3 w-3" /> Final Outputs {totalCount > 0 && `(${totalCount})`}
         </p>
-        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => fileRef.current?.click()} disabled={uploading}>
-          <Upload className="mr-1 h-3 w-3" /> {uploading ? "Uploading..." : "Add Output"}
-        </Button>
-        <input ref={fileRef} type="file" accept="image/*,.pdf,.ai,.psd,.fig,.sketch,.svg" multiple className="hidden" onChange={handleUpload} />
+        <div className="flex gap-1">
+          {!adding && <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setAdding(true)}><Plus className="mr-1 h-3 w-3" /> Add link</Button>}
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            <Upload className="mr-1 h-3 w-3" /> {uploading ? "Uploading..." : "Upload"}
+          </Button>
+          <input ref={fileRef} type="file" accept="image/*,.pdf,.ai,.psd,.fig,.sketch,.svg" multiple className="hidden" onChange={handleUpload} />
+        </div>
       </div>
+
+      {adding && (
+        <div className="space-y-2">
+          <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL..." className="h-8 text-sm" autoFocus />
+          <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Label (optional)" className="h-8 text-sm" />
+          <div className="flex gap-2">
+            <Button size="sm" className="h-7" onClick={handleAddLink}>Add</Button>
+            <Button variant="ghost" size="sm" className="h-7" onClick={() => { setAdding(false); setUrl(""); setLabel(""); }}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {links.map((link) => (
+        <div key={link.id} className="flex items-start gap-2 py-1.5 group">
+          <ExternalLink className="h-3 w-3 shrink-0 mt-1 text-emerald-600" />
+          <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm text-primary hover:underline break-all">
+            {link.label || link.url}
+          </a>
+          <button onClick={async () => { try { await deleteLink(link.id); onLinkRemoved(link.id); } catch { toast.error("Couldn't remove that link — try again."); } }}
+            className="text-muted-foreground/40 hover:text-destructive shrink-0 mt-0.5"><Trash2 className="h-3.5 w-3.5" /></button>
+        </div>
+      ))}
+
       {outputs.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {outputs.map((out) => (
             <div key={out.id} className="group relative rounded-md border border-emerald-200 dark:border-emerald-900/50 overflow-hidden">
               {out.url ? <img src={out.url} alt={out.file_name} className="h-20 w-full object-cover" /> :
                 <div className="flex h-20 items-center justify-center bg-emerald-50 dark:bg-emerald-950/20 text-xs text-muted-foreground">{out.file_name}</div>}
-              <button onClick={async () => { try { await deleteOutput(out.id); onRemoved(out.id); } catch { toast.error("Couldn't remove that output — try again."); } }}
+              <button onClick={async () => { try { await deleteOutput(out.id); onOutputRemoved(out.id); } catch { toast.error("Couldn't remove that output — try again."); } }}
                 className="absolute right-1 top-1 rounded-full bg-background/80 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Trash2 className="h-3 w-3 text-destructive" />
               </button>
@@ -992,55 +1024,10 @@ function OutputsSection({ taskId, outputs, onAdded, onRemoved }: {
           ))}
         </div>
       )}
-    </div>
-  );
-}
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// LINKS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function LinksSection({ taskId, links, onAdded, onRemoved }: {
-  taskId: string; links: TaskLink[]; onAdded: (l: TaskLink) => void; onRemoved: (id: string) => void;
-}) {
-  const [adding, setAdding] = useState(false);
-  const [url, setUrl] = useState("");
-  const [label, setLabel] = useState("");
-
-  async function handleAdd() {
-    if (!url.trim()) return;
-    try { const l = await addLink(taskId, url.trim(), label.trim()); onAdded(l); setUrl(""); setLabel(""); setAdding(false); }
-    catch { toast.error("Link didn't save — try again."); }
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Link2 className="h-3 w-3" /> Links {links.length > 0 && `(${links.length})`}
-        </p>
-        {!adding && <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setAdding(true)}><Plus className="mr-1 h-3 w-3" /> Add link</Button>}
-      </div>
-      {adding && (
-        <div className="space-y-2">
-          <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL..." className="h-8 text-sm" autoFocus />
-          <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Label (optional)" className="h-8 text-sm" />
-          <div className="flex gap-2">
-            <Button size="sm" className="h-7" onClick={handleAdd}>Add</Button>
-            <Button variant="ghost" size="sm" className="h-7" onClick={() => { setAdding(false); setUrl(""); setLabel(""); }}>Cancel</Button>
-          </div>
-        </div>
+      {totalCount === 0 && !adding && (
+        <p className="text-xs text-muted-foreground/50 italic">No final outputs yet. Add a link or upload a file.</p>
       )}
-      {links.map((link) => (
-        <div key={link.id} className="flex items-start gap-2 py-1.5 group">
-          <ExternalLink className="h-3 w-3 shrink-0 mt-1 text-primary" />
-          <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 text-sm text-primary hover:underline break-all">
-            {link.label || link.url}
-          </a>
-          <button onClick={async () => { try { await deleteLink(link.id); onRemoved(link.id); } catch { toast.error("Couldn't remove that link — try again."); } }}
-            className="text-muted-foreground/40 hover:text-destructive shrink-0 mt-0.5"><Trash2 className="h-3.5 w-3.5" /></button>
-        </div>
-      ))}
     </div>
   );
 }

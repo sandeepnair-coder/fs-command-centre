@@ -184,6 +184,13 @@ export async function moveTaskByAgent(input: MoveTaskInput) {
   const colNameLower = (col?.name || "").toLowerCase();
   const isDoneColumn = colNameLower.includes("done") || colNameLower.includes("approved") || colNameLower.includes("completed") || colNameLower.includes("closed");
 
+  if (isDoneColumn) {
+    const { count } = await supabase.from("task_links").select("id", { count: "exact", head: true }).eq("task_id", taskId);
+    if (!count || count === 0) {
+      throw new Error("Please add at least one Final Output link before marking this task as Done.");
+    }
+  }
+
   const { data: lastTask } = await supabase.from("tasks").select("position").eq("column_id", colId).order("position", { ascending: false }).limit(1);
   await supabase.from("tasks").update({
     column_id: colId,
