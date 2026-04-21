@@ -1,4 +1,5 @@
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
+export type TaskType = "paid" | "free";
 
 export type ProjectColumn = {
   id: string;
@@ -31,6 +32,7 @@ export type Task = {
   manager_id: string | null;
   is_completed?: boolean;
   completed_at?: string | null;
+  task_type?: TaskType;
   assignees?: TaskAssignee[];
   client_name?: string | null;
   manager_name?: string | null;

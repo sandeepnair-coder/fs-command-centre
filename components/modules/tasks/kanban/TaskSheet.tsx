@@ -559,6 +559,13 @@ export function TaskSheet({
                   </p>
                   <TagPicker taskId={detail.id} tags={taskTags} onTagsChange={setTaskTags} />
                 </div>
+
+                <div className="py-2.5 px-3">
+                  <p className="text-[11px] font-medium text-foreground/60 mb-1.5 flex items-center gap-1.5">
+                    <IndianRupee className="size-3.5" /> Task Type
+                  </p>
+                  <TaskTypeField task={detail} onChanged={handleFieldChange} />
+                </div>
                 </div>
 
                 {/* Meta (read-only) */}
