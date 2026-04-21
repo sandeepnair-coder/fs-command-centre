@@ -152,13 +152,7 @@ export function KanbanCard({
           <span className="h-2 w-2 rounded-full bg-yellow-400 shrink-0" />
         )}
         {task.task_type === "paid" && (
-          <svg className="h-3.5 w-3.5 shrink-0 text-foreground/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M16 8c0-2.2-2.7-4-6-4S4 5.8 4 8c0 3 4 4 6 5s6 2 6 5c0 2.2-2.7 4-6 4s-6-1.8-6-4" />
-            <line x1="11" y1="1" x2="11" y2="4" />
-            <line x1="13" y1="1" x2="13" y2="4" />
-            <line x1="11" y1="20" x2="11" y2="23" />
-            <line x1="13" y1="20" x2="13" y2="23" />
-          </svg>
+          <DollarSign className="h-3.5 w-3.5 shrink-0 text-foreground/70" />
         )}
       </div>
 
