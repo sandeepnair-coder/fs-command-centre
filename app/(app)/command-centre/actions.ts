@@ -458,7 +458,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       client_name: t.clients?.name ?? null,
     });
   }
-  for (const c of (needsReplyRes.data || []) as Array<{ id: string; subject: string | null; last_message_at: string; clients: { name: string } | null }>) {
+  for (const c of (needsReplyRes.data || []) as unknown as Array<{ id: string; subject: string | null; last_message_at: string; clients: { name: string } | null }>) {
     const days = Math.floor((today.getTime() - new Date(c.last_message_at).getTime()) / 86400000);
     criticalItems.push({
       id: c.id, type: "needs_reply", title: c.subject || "Untitled conversation",
