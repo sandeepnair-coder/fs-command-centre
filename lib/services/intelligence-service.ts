@@ -277,6 +277,82 @@ export async function getTasksAdvanced(input: {
 
 // ─── Client Stats ───────────────────────────────────────────────────────────
 
+// ─── Assignee Workload ──────────────────────────────────────────────────────
+
+export async function getAssigneeWorkload(input?: { member_name?: string }) {
+  const supabase = await createClient();
+
+  const [membersRes, tasksRes, assigneesRes] = await Promise.all([
+    supabase.from("members").select("id, full_name, email, role").eq("status", "active").order("full_name"),
+    supabase.from("tasks").select("id, priority, due_date, is_completed, column_id, project_columns(name)"),
+    supabase.from("task_assignees").select("task_id, user_id"),
+  ]);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const doneColumns = ["approved / done", "done", "completed", "closed"];
+  const reviewColumns = ["graphic client  review", "client video review", "review"];
+
+  const taskMap = new Map<string, { priority: string; due_date: string | null; is_completed: boolean; column: string }>();
+  for (const t of tasksRes.data || []) {
+    const col = ((t.project_columns as unknown as { name: string })?.name || "Unknown").toLowerCase();
+    taskMap.set(t.id, { priority: t.priority, due_date: t.due_date, is_completed: t.is_completed, column: col });
+  }
+
+  const memberTasks: Record<string, string[]> = {};
+  for (const a of assigneesRes.data || []) {
+    if (!memberTasks[a.user_id]) memberTasks[a.user_id] = [];
+    memberTasks[a.user_id].push(a.task_id);
+  }
+
+  const workload = (membersRes.data || []).map(m => {
+    const taskIds = memberTasks[m.id] || [];
+    let total = 0, open = 0, completed = 0, overdue = 0, in_review = 0, high_priority = 0;
+
+    for (const tid of taskIds) {
+      const t = taskMap.get(tid);
+      if (!t) continue;
+      total++;
+      if (t.is_completed || doneColumns.includes(t.column)) {
+        completed++;
+      } else {
+        open++;
+        if (t.due_date && t.due_date < today) overdue++;
+        if (reviewColumns.includes(t.column)) in_review++;
+        if (t.priority === "high" || t.priority === "urgent") high_priority++;
+      }
+    }
+
+    return {
+      member_id: m.id,
+      name: m.full_name,
+      email: m.email,
+      role: m.role,
+      total_tasks: total,
+      open_tasks: open,
+      completed_tasks: completed,
+      overdue_tasks: overdue,
+      in_review_tasks: in_review,
+      high_priority_tasks: high_priority,
+    };
+  }).filter(m => m.total_tasks > 0 || !input?.member_name);
+
+  if (input?.member_name) {
+    const name = input.member_name.toLowerCase();
+    const filtered = workload.filter(m => m.name.toLowerCase().includes(name));
+    return { members: filtered, total_members: filtered.length };
+  }
+
+  workload.sort((a, b) => b.open_tasks - a.open_tasks);
+
+  return {
+    total_members: workload.filter(m => m.total_tasks > 0).length,
+    top_assignee: workload[0] || null,
+    members: workload.filter(m => m.total_tasks > 0),
+  };
+}
+
+// ─── Client Stats ───────────────────────────────────────────────────────────
+
 export async function getClientStats() {
   const supabase = await createClient();
 

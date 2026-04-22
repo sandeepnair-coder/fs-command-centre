@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { verifyAgentAuth, apiError, apiSuccess } from "@/lib/api/auth";
 import { z } from "zod";
-import { getFinanceSummary, getProjectFinancials, getCommsSummary, getTasksAdvanced, getClientStats } from "@/lib/services/intelligence-service";
+import { getFinanceSummary, getProjectFinancials, getCommsSummary, getTasksAdvanced, getClientStats, getAssigneeWorkload } from "@/lib/services/intelligence-service";
 
 const IntelligenceSchema = z.object({
   action: z.enum([
@@ -23,6 +23,7 @@ const IntelligenceSchema = z.object({
     "tasks_completed",
     "client_stats",
     "client_tasks",
+    "assignee_workload",
   ]),
   client_name: z.string().max(200).optional(),
   client_id: z.string().uuid().optional(),
@@ -103,6 +104,9 @@ export async function POST(req: NextRequest) {
         break;
       case "client_tasks":
         result = await getTasksAdvanced({ ...params, status_filter: "pending" });
+        break;
+      case "assignee_workload":
+        result = await getAssigneeWorkload({ member_name: params.assignee_name });
         break;
       default:
         return apiError("INVALID_ACTION", `Unknown action: ${action}`);
