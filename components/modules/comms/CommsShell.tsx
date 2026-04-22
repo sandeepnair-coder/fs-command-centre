@@ -666,25 +666,15 @@ export function CommsShell({
                   sender_display_name: msg.sender || "Admin",
                   sender_identifier: "admin:self",
                   body_text: msg.text,
-                  body_html: null,
                   classification: "general" as const,
                   has_attachments: false,
                   is_from_client: false,
-                  direction: "outbound",
                   source_url: null,
                   extracted_entities: null,
                   linked_task_ids: [],
                   linked_fact_ids: [],
-                  channel_connection_id: null,
-                  external_message_id: null,
-                  in_reply_to: null,
-                  raw_payload: null,
-                  recipient_identifiers: null,
-                  sent_at: new Date().toISOString(),
-                  received_at: null,
-                  synced_at: null,
                   created_at: new Date().toISOString(),
-                } as CommsMessage]);
+                }]);
               }} />
             )}
           </>
