@@ -146,12 +146,12 @@ function DeliveryHealthSection({ health }: { health: DeliveryHealth }) {
   const cfg = HEALTH_CONFIG[health.healthStatus];
 
   const metrics = [
-    { label: "Total", value: health.total, icon: ListChecks },
-    { label: "Completed", value: health.completed, icon: CheckCircle2, positive: true },
-    { label: "In Progress", value: health.inProgress, icon: Activity },
-    { label: "Pending", value: health.pending, icon: Clock },
-    { label: "Overdue", value: health.overdue, icon: AlertTriangle, alert: health.overdue > 0 },
-    { label: "In Review", value: health.inReview, icon: ExternalLink },
+    { label: "Total", value: health.total, icon: ListChecks, href: "/tasks" },
+    { label: "Completed", value: health.completed, icon: CheckCircle2, positive: true, href: "/tasks" },
+    { label: "In Progress", value: health.inProgress, icon: Activity, href: "/tasks" },
+    { label: "Pending", value: health.pending, icon: Clock, href: "/tasks" },
+    { label: "Overdue", value: health.overdue, icon: AlertTriangle, alert: health.overdue > 0, href: "/tasks?dueDate=overdue" },
+    { label: "In Review", value: health.inReview, icon: ExternalLink, href: "/tasks?search=review" },
   ];
 
   return (
@@ -184,12 +184,14 @@ function DeliveryHealthSection({ health }: { health: DeliveryHealth }) {
         {/* Metrics grid */}
         <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-6">
           {metrics.map((m) => (
-            <div key={m.label} className="rounded-lg border p-3 text-center">
-              <p className={cn("text-xl font-bold tabular-nums text-stat-value", m.alert && "text-stat-negative", m.positive && "text-stat-positive")}>
-                {m.value}
-              </p>
-              <p className="text-[11px] text-muted-foreground">{m.label}</p>
-            </div>
+            <Link key={m.label} href={m.href}>
+              <div className="rounded-lg border p-3 text-center transition-colors hover:bg-muted/50">
+                <p className={cn("text-xl font-bold tabular-nums text-stat-value", m.alert && "text-stat-negative", m.positive && "text-stat-positive")}>
+                  {m.value}
+                </p>
+                <p className="text-[11px] text-muted-foreground">{m.label}</p>
+              </div>
+            </Link>
           ))}
         </div>
       </CardContent>
