@@ -59,11 +59,14 @@ import {
   Download,
   ImageIcon,
   ExternalLink,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   updateClient,
   deleteClient,
+  getClientById,
   getClientContacts,
   createClientContact,
   deleteClientContact,
@@ -112,6 +115,9 @@ export function ClientProfile({ client: initial }: { client: Client }) {
   // Asset dialog
   const [assetDialogOpen, setAssetDialogOpen] = useState(false);
   const [newAsset, setNewAsset] = useState({ file_name: "", storage_url: "", type: "other" as BrandAsset["type"] });
+
+  // Intelligence enrichment
+  const [enriching, setEnriching] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -180,6 +186,36 @@ export function ClientProfile({ client: initial }: { client: Client }) {
       router.push("/clients");
     } catch {
       toast.error("Couldn't delete. Try again?");
+    }
+  }
+
+  async function handleRunIntelligence() {
+    setEnriching(true);
+    try {
+      const res = await fetch("/api/clients/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: client.id, name: client.name, email: client.primary_email, website: client.website }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Enrichment failed");
+
+      const total = (data.fields_updated?.length || 0) + (data.facts_written || 0);
+      if (total > 0) {
+        toast.success(`Intelligence complete — ${total} fields enriched`);
+        const [updatedFacts, refreshedClient] = await Promise.all([
+          getClientFacts(client.id).catch(() => []),
+          getClientById(client.id).catch(() => null),
+        ]);
+        setFacts(updatedFacts as ClientFact[]);
+        if (refreshedClient) setClient(refreshedClient as Client);
+      } else {
+        toast.info("No new intelligence found — this client is already well-documented");
+      }
+    } catch (e) {
+      toast.error((e as Error).message || "Intelligence run failed");
+    } finally {
+      setEnriching(false);
     }
   }
 
@@ -434,6 +470,16 @@ export function ClientProfile({ client: initial }: { client: Client }) {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={handleRunIntelligence}
+              disabled={enriching}
+            >
+              {enriching ? <Loader2 className="mr-1 size-3 animate-spin" /> : <Sparkles className="mr-1 size-3" />}
+              {enriching ? "Running…" : "Run Intelligence"}
+            </Button>
             <Button
               variant="outline"
               size="sm"
