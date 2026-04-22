@@ -85,10 +85,12 @@ export function KanbanShell({
   initialClients = [],
   initialProjects = [],
   initialProfiles = [],
+  initialFilterParams,
 }: {
   initialClients?: Client[];
   initialProjects?: Project[];
   initialProfiles?: Profile[];
+  initialFilterParams?: Record<string, string | undefined>;
 } = {}) {
   const [clients, setClients] = useState<Client[]>(initialClients);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
@@ -120,7 +122,17 @@ export function KanbanShell({
   const [newTaskCreating, setNewTaskCreating] = useState(false);
 
   // ─── New feature state ──────────────────────────────────────────────────
-  const [filters, setFilters] = useState<TaskFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<TaskFilters>(() => {
+    if (!initialFilterParams) return DEFAULT_FILTERS;
+    const f = { ...DEFAULT_FILTERS };
+    if (initialFilterParams.dueDate === "overdue" || initialFilterParams.dueDate === "this_week" || initialFilterParams.dueDate === "this_month" || initialFilterParams.dueDate === "no_date") f.dueDate = initialFilterParams.dueDate;
+    if (initialFilterParams.priority === "low" || initialFilterParams.priority === "medium" || initialFilterParams.priority === "high" || initialFilterParams.priority === "urgent") f.priority = initialFilterParams.priority;
+    if (initialFilterParams.assignee && initialFilterParams.assignee !== "all") f.assignee = initialFilterParams.assignee;
+    if (initialFilterParams.manager && initialFilterParams.manager !== "all") f.manager = initialFilterParams.manager;
+    if (initialFilterParams.client && initialFilterParams.client !== "all") f.client = initialFilterParams.client;
+    if (initialFilterParams.search) f.search = initialFilterParams.search;
+    return f;
+  });
   const [viewMode, setViewMode] = useState<ViewMode>("kanban");
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [subtasksMap, setSubtasksMap] = useState<Record<string, Subtask[]>>({});

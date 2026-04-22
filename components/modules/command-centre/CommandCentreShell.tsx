@@ -106,9 +106,9 @@ export function CommandCentreShell({ dashboardData, metrics }: Props) {
 
 function AttentionCards({ health, needsReply }: { health: DeliveryHealth; needsReply: number }) {
   const cards = [
-    { label: "Overdue", value: health.overdue, icon: AlertTriangle, alert: health.overdue > 0, href: "/tasks" },
-    { label: "Urgent", value: health.urgent, icon: Flame, alert: health.urgent > 0, href: "/tasks" },
-    { label: "In Review", value: health.inReview, icon: Clock, alert: false, href: "/tasks" },
+    { label: "Overdue", value: health.overdue, icon: AlertTriangle, alert: health.overdue > 0, href: "/tasks?dueDate=overdue" },
+    { label: "Urgent", value: health.urgent, icon: Flame, alert: health.urgent > 0, href: "/tasks?priority=urgent" },
+    { label: "In Review", value: health.inReview, icon: Clock, alert: false, href: "/tasks?search=review" },
     { label: "Needs Reply", value: needsReply, icon: MessageSquare, alert: needsReply > 0, href: "/comms" },
   ];
 
@@ -386,8 +386,8 @@ function TessaInsights({ data }: { data: DashboardData }) {
 
 function QuickActions() {
   const actions = [
-    { label: "View Overdue", icon: AlertTriangle, href: "/tasks" },
-    { label: "Client Review", icon: ExternalLink, href: "/tasks" },
+    { label: "View Overdue", icon: AlertTriangle, href: "/tasks?dueDate=overdue" },
+    { label: "Client Review", icon: ExternalLink, href: "/tasks?search=review" },
     { label: "Open Comms", icon: MessageSquare, href: "/comms" },
     { label: "Clients", icon: Users, href: "/clients" },
     { label: "Finance", icon: TrendingUp, href: "/finance" },
