@@ -2,15 +2,10 @@ import { connection } from "next/server";
 import { LayoutDashboard } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { CommandCentreShell } from "@/components/modules/command-centre/CommandCentreShell";
-import {
-  getSnapshotMetrics,
-  getCriticalItems,
-  getPotentialClients,
-  getOpportunities,
-  getRecentComms,
-} from "./actions";
+import { getDashboardData, getSnapshotMetrics } from "./actions";
+import type { DashboardData, SnapshotMetrics } from "./actions";
 
-const EMPTY_METRICS = {
+const EMPTY_METRICS: SnapshotMetrics = {
   totalClients: 0,
   activeTasks: 0,
   overdueTasks: 0,
@@ -21,15 +16,20 @@ const EMPTY_METRICS = {
   totalRevenue: 0,
 };
 
+const EMPTY_DASHBOARD: DashboardData = {
+  deliveryHealth: { total: 0, completed: 0, inProgress: 0, pending: 0, overdue: 0, inReview: 0, urgent: 0, healthStatus: "good", completionRate: 0 },
+  teamWorkload: [],
+  clientRisk: [],
+  bottlenecks: [],
+  criticalItems: [],
+};
+
 export default async function CommandCentrePage() {
   await connection();
 
-  const [metrics, criticalItems, potentialClients, opportunities, recentComms] = await Promise.all([
+  const [dashboardData, metrics] = await Promise.all([
+    getDashboardData().catch(() => EMPTY_DASHBOARD),
     getSnapshotMetrics().catch(() => EMPTY_METRICS),
-    getCriticalItems().catch(() => []),
-    getPotentialClients().catch(() => []),
-    getOpportunities().catch(() => []),
-    getRecentComms().catch(() => []),
   ]);
 
   return (
@@ -37,20 +37,17 @@ export default async function CommandCentrePage() {
       <div className="mb-4 shrink-0">
         <div className="flex items-center gap-2">
           <LayoutDashboard className="size-6 text-primary" />
-          <h1 className="text-2xl font-bold tracking-tight text-balance">Command Centre</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Command Centre</h1>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground text-pretty">
-          The big picture. What needs attention, who&apos;s waiting, and where the opportunities are.
+        <p className="mt-1 text-sm text-muted-foreground">
+          Delivery health, team workload, and client risk — at a glance.
         </p>
       </div>
       <Separator className="mb-4 shrink-0" />
       <div className="min-h-0 flex-1 overflow-hidden">
         <CommandCentreShell
+          dashboardData={dashboardData}
           metrics={metrics}
-          criticalItems={criticalItems}
-          potentialClients={potentialClients}
-          opportunities={opportunities}
-          recentComms={recentComms}
         />
       </div>
     </div>

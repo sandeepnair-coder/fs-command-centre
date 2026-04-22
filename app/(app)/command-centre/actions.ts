@@ -63,6 +63,54 @@ export type RecentComm = {
   sentiment: string | null;
 };
 
+// ─── Dashboard Types ───────────────────────────────────────────────────────
+
+export type DeliveryHealth = {
+  total: number;
+  completed: number;
+  inProgress: number;
+  pending: number;
+  overdue: number;
+  inReview: number;
+  urgent: number;
+  healthStatus: "excellent" | "good" | "warning" | "critical";
+  completionRate: number;
+};
+
+export type TeamWorkloadItem = {
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  totalTasks: number;
+  overdue: number;
+  urgent: number;
+  avgAgingDays: number;
+};
+
+export type ClientRiskItem = {
+  clientId: string;
+  name: string;
+  totalTasks: number;
+  overdue: number;
+  inReview: number;
+  riskLevel: "low" | "medium" | "high" | "critical";
+};
+
+export type BottleneckItem = {
+  columnId: string;
+  stageName: string;
+  taskCount: number;
+  avgAgingDays: number;
+};
+
+export type DashboardData = {
+  deliveryHealth: DeliveryHealth;
+  teamWorkload: TeamWorkloadItem[];
+  clientRisk: ClientRiskItem[];
+  bottlenecks: BottleneckItem[];
+  criticalItems: CriticalItem[];
+};
+
 // ─── Snapshot Metrics ───────────────────────────────────────────────────────
 
 export async function getSnapshotMetrics(): Promise<SnapshotMetrics> {
@@ -258,6 +306,179 @@ export async function getRecentComms(): Promise<RecentComm[]> {
     ai_summary: c.ai_summary as string | null,
     sentiment: c.sentiment as string | null,
   }));
+}
+
+// ─── Dashboard Data (comprehensive) ───────────────────────────────────────
+
+const DONE_COLUMNS = ["approved / done", "done", "completed", "closed"];
+const REVIEW_COLUMNS = ["graphic client  review", "client video review", "client review", "internal review", "review"];
+const PROGRESS_COLUMNS = ["in progress"];
+
+export async function getDashboardData(): Promise<DashboardData> {
+  const supabase = await createClient();
+  const today = new Date();
+  const todayStr = today.toISOString().split("T")[0];
+
+  // ── Parallel: fetch all raw data ──────────────────────────────────────
+  const [allTasksRes, assigneesRes, membersRes, clientsRes, needsReplyRes] = await Promise.all([
+    supabase.from("tasks").select("id, title, priority, due_date, is_completed, column_id, client_id, manager_id, created_at, project_columns(id, name), clients(id, name)"),
+    supabase.from("task_assignees").select("task_id, user_id"),
+    supabase.from("members").select("id, full_name, avatar_url").eq("status", "active"),
+    supabase.from("clients").select("id, name"),
+    supabase.from("conversations").select("id, subject, last_message_at, client_id, clients(name)").eq("status", "waiting_on_us").order("last_message_at").limit(10),
+  ]);
+
+  const allTasks = (allTasksRes.data || []) as Array<{
+    id: string; title: string; priority: string; due_date: string | null;
+    is_completed: boolean; column_id: string; client_id: string | null;
+    manager_id: string | null; created_at: string;
+    project_columns: { id: string; name: string } | null;
+    clients: { id: string; name: string } | null;
+  }>;
+  const assignees = (assigneesRes.data || []) as Array<{ task_id: string; user_id: string }>;
+  const members = (membersRes.data || []) as Array<{ id: string; full_name: string; avatar_url: string | null }>;
+  const memberMap = new Map(members.map(m => [m.id, m]));
+
+  // Build assignee lookup: taskId → userId[]
+  const taskAssigneeMap = new Map<string, string[]>();
+  for (const a of assignees) {
+    if (!taskAssigneeMap.has(a.task_id)) taskAssigneeMap.set(a.task_id, []);
+    taskAssigneeMap.get(a.task_id)!.push(a.user_id);
+  }
+
+  // ── Classify tasks ────────────────────────────────────────────────────
+  const colName = (t: typeof allTasks[0]) => (t.project_columns?.name || "").toLowerCase();
+  const isDone = (t: typeof allTasks[0]) => t.is_completed || DONE_COLUMNS.includes(colName(t));
+  const isReview = (t: typeof allTasks[0]) => REVIEW_COLUMNS.some(r => colName(t).includes(r));
+  const isProgress = (t: typeof allTasks[0]) => PROGRESS_COLUMNS.some(p => colName(t).includes(p));
+  const isOverdue = (t: typeof allTasks[0]) => !isDone(t) && t.due_date != null && t.due_date < todayStr;
+  const ageDays = (t: typeof allTasks[0]) => Math.floor((today.getTime() - new Date(t.created_at).getTime()) / 86400000);
+  const overdueDays = (t: typeof allTasks[0]) => t.due_date ? Math.floor((today.getTime() - new Date(t.due_date).getTime()) / 86400000) : 0;
+
+  const activeTasks = allTasks.filter(t => !isDone(t));
+  const completedTasks = allTasks.filter(t => isDone(t));
+  const overdueTasks = allTasks.filter(isOverdue);
+  const reviewTasks = activeTasks.filter(isReview);
+  const progressTasks = activeTasks.filter(isProgress);
+  const urgentTasks = activeTasks.filter(t => t.priority === "urgent");
+  const pendingTasks = activeTasks.filter(t => !isReview(t) && !isProgress(t));
+
+  // ── 1. Delivery Health ────────────────────────────────────────────────
+  const overduePercent = allTasks.length > 0 ? (overdueTasks.length / allTasks.length) * 100 : 0;
+  const healthStatus: DeliveryHealth["healthStatus"] =
+    overdueTasks.length === 0 && urgentTasks.length === 0 ? "excellent" :
+    overduePercent < 10 ? "good" :
+    overduePercent < 25 ? "warning" : "critical";
+
+  const deliveryHealth: DeliveryHealth = {
+    total: allTasks.length,
+    completed: completedTasks.length,
+    inProgress: progressTasks.length,
+    pending: pendingTasks.length,
+    overdue: overdueTasks.length,
+    inReview: reviewTasks.length,
+    urgent: urgentTasks.length,
+    healthStatus,
+    completionRate: allTasks.length > 0 ? Math.round((completedTasks.length / allTasks.length) * 100) : 0,
+  };
+
+  // ── 2. Team Workload ──────────────────────────────────────────────────
+  const workloadMap = new Map<string, TeamWorkloadItem>();
+  for (const task of activeTasks) {
+    const assigneeIds = taskAssigneeMap.get(task.id) || [];
+    for (const userId of assigneeIds) {
+      const member = memberMap.get(userId);
+      if (!member) continue;
+      if (!workloadMap.has(userId)) {
+        workloadMap.set(userId, { userId, name: member.full_name, avatarUrl: member.avatar_url, totalTasks: 0, overdue: 0, urgent: 0, avgAgingDays: 0 });
+      }
+      const w = workloadMap.get(userId)!;
+      w.totalTasks++;
+      if (isOverdue(task)) w.overdue++;
+      if (task.priority === "urgent") w.urgent++;
+      w.avgAgingDays += ageDays(task);
+    }
+  }
+  const teamWorkload = Array.from(workloadMap.values())
+    .map(w => ({ ...w, avgAgingDays: w.totalTasks > 0 ? Math.round(w.avgAgingDays / w.totalTasks) : 0 }))
+    .sort((a, b) => b.overdue - a.overdue || b.totalTasks - a.totalTasks);
+
+  // ── 3. Client Risk ────────────────────────────────────────────────────
+  const clientRiskMap = new Map<string, ClientRiskItem>();
+  for (const task of activeTasks) {
+    if (!task.client_id || !task.clients) continue;
+    if (!clientRiskMap.has(task.client_id)) {
+      clientRiskMap.set(task.client_id, { clientId: task.client_id, name: task.clients.name, totalTasks: 0, overdue: 0, inReview: 0, riskLevel: "low" });
+    }
+    const c = clientRiskMap.get(task.client_id)!;
+    c.totalTasks++;
+    if (isOverdue(task)) c.overdue++;
+    if (isReview(task)) c.inReview++;
+  }
+  const clientRisk = Array.from(clientRiskMap.values()).map(c => {
+    const overdueRate = c.totalTasks > 0 ? c.overdue / c.totalTasks : 0;
+    const riskLevel: ClientRiskItem["riskLevel"] =
+      c.overdue >= 5 || overdueRate > 0.5 ? "critical" :
+      c.overdue >= 3 || overdueRate > 0.3 ? "high" :
+      c.overdue >= 1 ? "medium" : "low";
+    return { ...c, riskLevel };
+  }).sort((a, b) => {
+    const order = { critical: 0, high: 1, medium: 2, low: 3 };
+    return order[a.riskLevel] - order[b.riskLevel] || b.overdue - a.overdue;
+  });
+
+  // ── 4. Bottlenecks ────────────────────────────────────────────────────
+  const bottleneckMap = new Map<string, { name: string; count: number; totalAge: number }>();
+  for (const task of activeTasks) {
+    if (!task.project_columns) continue;
+    const cid = task.project_columns.id;
+    const cname = task.project_columns.name;
+    if (DONE_COLUMNS.includes(cname.toLowerCase())) continue;
+    if (!bottleneckMap.has(cid)) bottleneckMap.set(cid, { name: cname, count: 0, totalAge: 0 });
+    const b = bottleneckMap.get(cid)!;
+    b.count++;
+    b.totalAge += ageDays(task);
+  }
+  const bottlenecks = Array.from(bottleneckMap.entries())
+    .map(([columnId, d]) => ({ columnId, stageName: d.name, taskCount: d.count, avgAgingDays: d.count > 0 ? Math.round(d.totalAge / d.count) : 0 }))
+    .sort((a, b) => b.taskCount - a.taskCount);
+
+  // ── 5. Critical Items (reuse existing logic inline) ───────────────────
+  const criticalItems: CriticalItem[] = [];
+  for (const t of overdueTasks.slice(0, 12)) {
+    const days = overdueDays(t);
+    criticalItems.push({
+      id: t.id, type: "overdue", title: t.title,
+      subtitle: `${days}d overdue`, href: "/tasks",
+      priority: days > 7 ? "urgent" : "high", age_days: days,
+      client_name: t.clients?.name ?? null,
+    });
+  }
+  for (const t of urgentTasks.slice(0, 5)) {
+    if (criticalItems.some(i => i.id === t.id)) continue;
+    criticalItems.push({
+      id: t.id, type: "urgent", title: t.title,
+      subtitle: "Urgent priority", href: "/tasks",
+      priority: "urgent", age_days: 0,
+      client_name: t.clients?.name ?? null,
+    });
+  }
+  for (const c of (needsReplyRes.data || []) as Array<{ id: string; subject: string | null; last_message_at: string; clients: { name: string } | null }>) {
+    const days = Math.floor((today.getTime() - new Date(c.last_message_at).getTime()) / 86400000);
+    criticalItems.push({
+      id: c.id, type: "needs_reply", title: c.subject || "Untitled conversation",
+      subtitle: `Waiting ${days}d for reply`, href: "/comms",
+      priority: days > 3 ? "urgent" : days > 1 ? "high" : "medium", age_days: days,
+      client_name: c.clients?.name ?? null,
+    });
+  }
+  criticalItems.sort((a, b) => {
+    const pOrder = { urgent: 0, high: 1, medium: 2 };
+    if (pOrder[a.priority] !== pOrder[b.priority]) return pOrder[a.priority] - pOrder[b.priority];
+    return b.age_days - a.age_days;
+  });
+
+  return { deliveryHealth, teamWorkload, clientRisk, bottlenecks, criticalItems: criticalItems.slice(0, 15) };
 }
 
 // ─── Build live context snapshot for Tessa ──────────────────────────────────
