@@ -185,6 +185,30 @@ export async function getClientTasks(input: GetClientTasksInput) {
     .limit(input.limit);
   if (error) throw error;
 
+  const taskIds = (tasks || []).map(t => t.id);
+  const assigneeMap: Record<string, string[]> = {};
+
+  if (taskIds.length > 0) {
+    const { data: assignees } = await supabase
+      .from("task_assignees")
+      .select("task_id, user_id")
+      .in("task_id", taskIds);
+
+    const userIds = [...new Set((assignees || []).map(a => a.user_id))];
+    if (userIds.length > 0) {
+      const { data: members } = await supabase
+        .from("members")
+        .select("id, full_name")
+        .in("id", userIds);
+      const nameMap = new Map((members || []).map(m => [m.id, m.full_name]));
+      for (const a of assignees || []) {
+        if (!assigneeMap[a.task_id]) assigneeMap[a.task_id] = [];
+        const name = nameMap.get(a.user_id);
+        if (name) assigneeMap[a.task_id].push(name);
+      }
+    }
+  }
+
   const formatted = (tasks || []).map((t) => ({
     id: t.id,
     title: t.title,
@@ -193,6 +217,7 @@ export async function getClientTasks(input: GetClientTasksInput) {
     is_completed: t.is_completed,
     column: (t.project_columns as unknown as { name: string })?.name || "Unknown",
     project: (t.projects as unknown as { name: string })?.name || "Unknown",
+    assignees: assigneeMap[t.id] || [],
   }));
 
   const completed = formatted.filter(t => t.is_completed).length;
