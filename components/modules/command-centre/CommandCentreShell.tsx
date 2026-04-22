@@ -49,9 +49,9 @@ type Props = {
 };
 
 const PRIORITY_STYLE: Record<string, string> = {
-  urgent: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
-  high: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
-  medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300",
+  urgent: "bg-status-danger-muted text-status-danger",
+  high: "bg-status-warning-muted text-status-warning",
+  medium: "bg-muted text-muted-foreground",
 };
 const ITEM_TYPE_LABEL: Record<string, string> = { overdue: "Overdue", urgent: "Urgent", needs_reply: "Needs reply", stale_client: "Stale" };
 
@@ -116,12 +116,12 @@ function AttentionCards({ health, needsReply }: { health: DeliveryHealth; needsR
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       {cards.map((c) => (
         <Link key={c.label} href={c.href}>
-          <Card className={cn("transition-colors hover:bg-muted/50", c.alert && "border-destructive/60 bg-destructive/5")}>
+          <Card className={cn("transition-colors hover:bg-muted/50", c.alert && "border-status-danger/60 bg-status-danger-muted")}>
             <CardContent className="flex items-center gap-3 p-4">
-              <c.icon className={cn("size-5 shrink-0", c.alert ? "text-destructive" : "text-muted-foreground")} />
+              <c.icon className={cn("size-5 shrink-0", c.alert ? "text-status-danger" : "text-muted-foreground")} />
               <div>
-                <p className={cn("text-2xl font-bold tabular-nums", c.alert && "text-destructive")}>{c.value}</p>
-                <p className="text-xs text-muted-foreground">{c.label}</p>
+                <p className={cn("text-2xl font-bold tabular-nums text-stat-value", c.alert && "text-stat-negative")}>{c.value}</p>
+                <p className="text-xs text-stat-label">{c.label}</p>
               </div>
             </CardContent>
           </Card>
@@ -136,9 +136,9 @@ function AttentionCards({ health, needsReply }: { health: DeliveryHealth; needsR
 // ═══════════════════════════════════════════════════════════════════════════
 
 const HEALTH_CONFIG = {
-  excellent: { color: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-400", label: "Excellent", Icon: CheckCircle2 },
+  excellent: { color: "bg-status-success", text: "text-status-success", label: "Excellent", Icon: CheckCircle2 },
   good: { color: "bg-primary", text: "text-primary", label: "On Track", Icon: TrendingUp },
-  warning: { color: "bg-amber-500", text: "text-amber-700 dark:text-amber-400", label: "At Risk", Icon: AlertTriangle },
+  warning: { color: "bg-status-warning", text: "text-status-warning", label: "At Risk", Icon: AlertTriangle },
   critical: { color: "bg-destructive", text: "text-destructive", label: "Critical", Icon: XCircle },
 };
 
@@ -185,7 +185,7 @@ function DeliveryHealthSection({ health }: { health: DeliveryHealth }) {
         <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-6">
           {metrics.map((m) => (
             <div key={m.label} className="rounded-lg border p-3 text-center">
-              <p className={cn("text-xl font-bold tabular-nums", m.alert && "text-destructive", m.positive && "text-emerald-600 dark:text-emerald-400")}>
+              <p className={cn("text-xl font-bold tabular-nums text-stat-value", m.alert && "text-stat-negative", m.positive && "text-stat-positive")}>
                 {m.value}
               </p>
               <p className="text-[11px] text-muted-foreground">{m.label}</p>
@@ -232,7 +232,7 @@ function TeamWorkloadSection({ workload }: { workload: TeamWorkloadItem[] }) {
                 <div className="flex gap-2 text-[11px] text-muted-foreground">
                   <span>{m.totalTasks} tasks</span>
                   {m.overdue > 0 && <span className="font-medium text-destructive">{m.overdue} overdue</span>}
-                  {m.urgent > 0 && <span className="font-medium text-amber-600">{m.urgent} urgent</span>}
+                  {m.urgent > 0 && <span className="font-medium text-stat-warning">{m.urgent} urgent</span>}
                 </div>
               </div>
               <div className="text-right">
@@ -252,10 +252,10 @@ function TeamWorkloadSection({ workload }: { workload: TeamWorkloadItem[] }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const RISK_BADGE: Record<string, { label: string; className: string }> = {
-  critical: { label: "Critical", className: "bg-red-500 text-white hover:bg-red-500" },
-  high: { label: "High", className: "bg-orange-500 text-white hover:bg-orange-500" },
-  medium: { label: "Watch", className: "bg-amber-500 text-white hover:bg-amber-500" },
-  low: { label: "Healthy", className: "bg-emerald-500 text-white hover:bg-emerald-500" },
+  critical: { label: "Critical", className: "bg-status-danger text-status-danger-foreground hover:bg-status-danger" },
+  high: { label: "High", className: "bg-status-warning text-status-warning-foreground hover:bg-status-warning" },
+  medium: { label: "Watch", className: "bg-muted text-muted-foreground hover:bg-muted" },
+  low: { label: "Healthy", className: "bg-status-success text-status-success-foreground hover:bg-status-success" },
 };
 
 function ClientRiskSection({ clients }: { clients: ClientRiskItem[] }) {
@@ -324,11 +324,11 @@ function BottleneckSection({ bottlenecks }: { bottlenecks: BottleneckItem[] }) {
                 <span className="font-medium">{b.stageName}</span>
                 <span className="flex items-center gap-2 text-xs text-muted-foreground">
                   <span className="font-medium tabular-nums">{b.taskCount}</span> tasks
-                  <span className={cn("tabular-nums", isHot && "font-medium text-amber-600")}>{b.avgAgingDays}d avg</span>
+                  <span className={cn("tabular-nums", isHot && "font-medium text-stat-warning")}>{b.avgAgingDays}d avg</span>
                 </span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div className={cn("h-full rounded-full transition-all", isHot ? "bg-amber-500" : "bg-primary/60")} style={{ width: `${pct}%` }} />
+                <div className={cn("h-full rounded-full transition-all", isHot ? "bg-status-warning" : "bg-primary/60")} style={{ width: `${pct}%` }} />
               </div>
             </div>
           );
@@ -366,12 +366,12 @@ function TessaInsights({ data }: { data: DashboardData }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="size-4 text-amber-500" />Tessa&apos;s Observations</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="size-4 text-stat-warning" />Tessa&apos;s Observations</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2.5 p-4 pt-0">
         {insights.map((insight, i) => (
           <div key={i} className="flex gap-2 text-sm">
-            <Lightbulb className="mt-0.5 size-4 shrink-0 text-amber-500" />
+            <Lightbulb className="mt-0.5 size-4 shrink-0 text-stat-warning" />
             <span dangerouslySetInnerHTML={{ __html: insight.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') }} />
           </div>
         ))}
