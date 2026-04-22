@@ -43,6 +43,8 @@ import {
   Bell,
   CircleDot,
   UserPlus,
+  Send,
+  Loader2,
 } from "lucide-react";
 import {
   Dialog,
@@ -611,6 +613,9 @@ export function CommsShell({
                       )}>
                         {msg.sender_display_name || "Unknown"}
                       </span>
+                      {!msg.is_from_client && msg.sender_identifier === "admin" && (
+                        <Badge variant="outline" className="text-[8px] h-3 px-1 border-violet-300 text-violet-600 dark:border-violet-700 dark:text-violet-400">Admin</Badge>
+                      )}
                       <Badge variant="outline" className={cn("text-[8px] h-3 px-1", CHANNEL_CONFIG[msg.channel].color)}>
                         {CHANNEL_CONFIG[msg.channel].label}
                       </Badge>
@@ -648,6 +653,40 @@ export function CommsShell({
                 ))}
               </div>
             </ScrollArea>
+
+            {/* Reply box for WhatsApp conversations */}
+            {selected.channel === "whatsapp" && (
+              <WhatsAppReplyBox conversationId={selected.id} onSent={(msg) => {
+                setMessages(prev => [...prev, {
+                  id: `temp-${Date.now()}`,
+                  conversation_id: selected.id,
+                  channel: "whatsapp" as ChannelType,
+                  client_id: null,
+                  project_id: null,
+                  sender_display_name: msg.sender || "Admin",
+                  sender_identifier: "admin",
+                  body_text: msg.text,
+                  body_html: null,
+                  classification: "general" as const,
+                  has_attachments: false,
+                  is_from_client: false,
+                  direction: "outbound",
+                  source_url: null,
+                  extracted_entities: null,
+                  linked_task_ids: [],
+                  linked_fact_ids: [],
+                  channel_connection_id: null,
+                  external_message_id: null,
+                  in_reply_to: null,
+                  raw_payload: null,
+                  recipient_identifiers: null,
+                  sent_at: new Date().toISOString(),
+                  received_at: null,
+                  synced_at: null,
+                  created_at: new Date().toISOString(),
+                } as CommsMessage]);
+              }} />
+            )}
           </>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
@@ -1063,6 +1102,59 @@ export function CommsShell({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WhatsApp Reply Box
+// ═══════════════════════════════════════════════════════════════════════════
+
+function WhatsAppReplyBox({ conversationId, onSent }: { conversationId: string; onSent: (msg: { text: string; sender: string }) => void }) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const handleSend = useCallback(async () => {
+    const msg = text.trim();
+    if (!msg || sending) return;
+
+    setSending(true);
+    try {
+      const res = await fetch("/api/comms/whatsapp/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId, message: msg }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to send");
+        return;
+      }
+      setText("");
+      onSent({ text: msg, sender: data.message?.sender_display_name || "Admin" });
+      toast.success("Reply sent to WhatsApp");
+    } catch {
+      toast.error("Failed to send reply");
+    } finally {
+      setSending(false);
+    }
+  }, [text, sending, conversationId, onSent]);
+
+  return (
+    <div className="shrink-0 border-t p-3">
+      <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex gap-2">
+        <Input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Reply on WhatsApp..."
+          className="flex-1 text-sm"
+          disabled={sending}
+        />
+        <Button type="submit" size="icon" disabled={!text.trim() || sending} aria-label="Send reply">
+          {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+        </Button>
+      </form>
+      <p className="mt-1 text-[10px] text-muted-foreground">This reply will be sent directly to the user&apos;s WhatsApp.</p>
     </div>
   );
 }

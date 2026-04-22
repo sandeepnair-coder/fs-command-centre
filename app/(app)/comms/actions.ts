@@ -317,6 +317,19 @@ export async function resolveInsight(insightId: string) {
   if (error) throw error;
 }
 
+// ─── WhatsApp Reply ─────────────────────────────────────────────────────────
+
+export async function sendWhatsAppReply(conversationId: string, message: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ""}/api/comms/whatsapp/reply`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ conversationId, message }),
+  });
+  const data = await res.json();
+  if (!res.ok) return { ok: false, error: data.error || "Send failed" };
+  return { ok: true };
+}
+
 // ─── Audit Helper ───────────────────────────────────────────────────────────
 
 async function auditLog(eventType: string, entityType: string, entityId: string, actorId: string | null, metadata?: Record<string, unknown>) {
