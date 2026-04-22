@@ -583,7 +583,7 @@ async function buildContextSnapshot(): Promise<string> {
 
 export async function askOpenClaw(question: string): Promise<string> {
   const member = await getCurrentMember();
-  if (!member?.is_manager) throw new Error("Manager access required");
+  if (!member) throw new Error("Authentication required");
 
   const wsUrl = process.env.OPENCLAW_API_URL;
   const token = process.env.OPENCLAW_API_TOKEN;

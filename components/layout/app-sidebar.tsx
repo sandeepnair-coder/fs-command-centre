@@ -29,7 +29,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { href: "/command-centre", label: "Command Centre", icon: LayoutDashboard, requireManager: true },
+  { href: "/command-centre", label: "Command Centre", icon: LayoutDashboard },
   { href: "/tasks", label: "Task Management", icon: ListChecks },
   { href: "/finance", label: "Finance", icon: DollarSign, minRole: ["owner", "admin", "member"] },
   { href: "/comms", label: "Comms", icon: MessageSquareText, minRole: ["owner", "admin", "member"], requireManager: true },
