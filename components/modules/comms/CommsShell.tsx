@@ -613,7 +613,7 @@ export function CommsShell({
                       )}>
                         {msg.sender_display_name || "Unknown"}
                       </span>
-                      {!msg.is_from_client && msg.sender_identifier === "admin" && (
+                      {!msg.is_from_client && msg.sender_identifier?.startsWith("admin") && (
                         <Badge variant="outline" className="text-[8px] h-3 px-1 border-violet-300 text-violet-600 dark:border-violet-700 dark:text-violet-400">Admin</Badge>
                       )}
                       <Badge variant="outline" className={cn("text-[8px] h-3 px-1", CHANNEL_CONFIG[msg.channel].color)}>
@@ -664,7 +664,7 @@ export function CommsShell({
                   client_id: null,
                   project_id: null,
                   sender_display_name: msg.sender || "Admin",
-                  sender_identifier: "admin",
+                  sender_identifier: "admin:self",
                   body_text: msg.text,
                   body_html: null,
                   classification: "general" as const,
@@ -1117,6 +1117,7 @@ function WhatsAppReplyBox({ conversationId, onSent }: { conversationId: string; 
   const handleSend = useCallback(async () => {
     const msg = text.trim();
     if (!msg || sending) return;
+    if (msg.length > 4096) { toast.error("Message too long (max 4096 chars)"); return; }
 
     setSending(true);
     try {
@@ -1128,13 +1129,16 @@ function WhatsAppReplyBox({ conversationId, onSent }: { conversationId: string; 
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error || "Failed to send");
+        if (data.status === "failed") {
+          toast.info("Message saved — delivery failed. Check logs.");
+        }
         return;
       }
       setText("");
       onSent({ text: msg, sender: data.message?.sender_display_name || "Admin" });
       toast.success("Reply sent to WhatsApp");
     } catch {
-      toast.error("Failed to send reply");
+      toast.error("Network error — could not reach server");
     } finally {
       setSending(false);
     }
