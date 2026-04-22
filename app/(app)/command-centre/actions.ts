@@ -328,15 +328,10 @@ export async function getDashboardData(): Promise<DashboardData> {
     supabase.from("conversations").select("id, subject, last_message_at, client_id, clients(name)").eq("status", "waiting_on_us").order("last_message_at").limit(10),
   ]);
 
-  const allTasks = (allTasksRes.data || []) as Array<{
-    id: string; title: string; priority: string; due_date: string | null;
-    is_completed: boolean; column_id: string; client_id: string | null;
-    manager_id: string | null; created_at: string;
-    project_columns: { id: string; name: string } | null;
-    clients: { id: string; name: string } | null;
-  }>;
-  const assignees = (assigneesRes.data || []) as Array<{ task_id: string; user_id: string }>;
-  const members = (membersRes.data || []) as Array<{ id: string; full_name: string; avatar_url: string | null }>;
+  type RawTask = { id: string; title: string; priority: string; due_date: string | null; is_completed: boolean; column_id: string; client_id: string | null; manager_id: string | null; created_at: string; project_columns: { id: string; name: string } | null; clients: { id: string; name: string } | null };
+  const allTasks = ((allTasksRes.data || []) as unknown as RawTask[]);
+  const assignees = (assigneesRes.data || []) as unknown as Array<{ task_id: string; user_id: string }>;
+  const members = (membersRes.data || []) as unknown as Array<{ id: string; full_name: string; avatar_url: string | null }>;
   const memberMap = new Map(members.map(m => [m.id, m]));
 
   // Build assignee lookup: taskId → userId[]
