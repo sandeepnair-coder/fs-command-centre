@@ -13,6 +13,7 @@ const tabs = [
   { href: "/finance/expenses", label: "Expenses" },
   { href: "/finance/projects", label: "Project Financials" },
   { href: "/finance/invoices", label: "Invoices" },
+  { href: "/finance/rate-card", label: "Rate Card" },
 ];
 
 function TabFallback() {
