@@ -71,14 +71,15 @@ export async function updateItemField(
   const supabase = await createClient();
   const member = await getCurrentMember();
 
-  const { data: item } = await supabase
+  const { data: itemData } = await supabase
     .from("rate_card_items")
     .select("id, version_id, name, " + field)
     .eq("id", itemId)
     .single();
-  if (!item) throw new Error("Item not found");
+  if (!itemData) throw new Error("Item not found");
 
-  const oldValue = String((item as Record<string, unknown>)[field] ?? "");
+  const item = itemData as unknown as Record<string, unknown>;
+  const oldValue = String(item[field] ?? "");
 
   await supabase
     .from("rate_card_items")
@@ -86,7 +87,7 @@ export async function updateItemField(
     .eq("id", itemId);
 
   await supabase.from("rate_card_changes").insert({
-    version_id: item.version_id,
+    version_id: item.version_id as string,
     entity_type: "item",
     entity_id: itemId,
     field,
@@ -109,14 +110,15 @@ export async function updateTierField(
   const supabase = await createClient();
   const member = await getCurrentMember();
 
-  const { data: tier } = await supabase
+  const { data: tierData } = await supabase
     .from("rate_card_tiers")
     .select("id, version_id, name, " + field)
     .eq("id", tierId)
     .single();
-  if (!tier) throw new Error("Tier not found");
+  if (!tierData) throw new Error("Tier not found");
 
-  const oldValue = String((tier as Record<string, unknown>)[field] ?? "");
+  const tier = tierData as unknown as Record<string, unknown>;
+  const oldValue = String(tier[field] ?? "");
 
   await supabase
     .from("rate_card_tiers")
@@ -124,7 +126,7 @@ export async function updateTierField(
     .eq("id", tierId);
 
   await supabase.from("rate_card_changes").insert({
-    version_id: tier.version_id,
+    version_id: tier.version_id as string,
     entity_type: "tier",
     entity_id: tierId,
     field,
@@ -147,14 +149,15 @@ export async function updateVersionField(
   const supabase = await createClient();
   const member = await getCurrentMember();
 
-  const { data: version } = await supabase
+  const { data: versionData } = await supabase
     .from("rate_card_versions")
     .select("id, " + field)
     .eq("id", versionId)
     .single();
-  if (!version) throw new Error("Version not found");
+  if (!versionData) throw new Error("Version not found");
 
-  const oldValue = String((version as Record<string, unknown>)[field] ?? "");
+  const versionRecord = versionData as unknown as Record<string, unknown>;
+  const oldValue = String(versionRecord[field] ?? "");
 
   await supabase
     .from("rate_card_versions")
