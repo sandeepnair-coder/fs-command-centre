@@ -9,22 +9,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,17 +26,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Columns3, MoreVertical, Trash2, BarChart3, Pencil } from "lucide-react";
+import { Columns3, MoreVertical, Trash2, BarChart3, Pencil } from "lucide-react";
 import {
   getClients,
   getProjects,
   getColumns,
   getProfiles,
-  createColumn,
-  createTask,
-  addAssignee,
   deleteProject,
-  renameProject,
   seedDefaultColumns,
 } from "@/app/(app)/tasks/actions";
 import dynamic from "next/dynamic";
@@ -63,14 +43,17 @@ const CalendarView = dynamic(() => import("./CalendarView").then((m) => ({ defau
 const ClientView = dynamic(() => import("./ClientView").then((m) => ({ default: m.ClientView })), { ssr: false });
 const StreamView = dynamic(() => import("./StreamView").then((m) => ({ default: m.StreamView })), { ssr: false });
 const AnalyticsPanel = dynamic(() => import("./AnalyticsPanel").then((m) => ({ default: m.AnalyticsPanel })), { ssr: false });
-const TaskSheet = dynamic(() => import("./TaskSheet").then((m) => ({ default: m.TaskSheet })), { ssr: false });
 import { NewBoardDialog } from "../new-project-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { ProjectColumn, TaskPriority, Profile, TaskFilters, ViewMode, Subtask } from "@/lib/types/tasks";
+import type { ProjectColumn, Profile, TaskFilters, ViewMode, Subtask } from "@/lib/types/tasks";
 import { DEFAULT_FILTERS, filterColumns } from "@/lib/tasks/filters";
 import { toast } from "sonner";
 import { DELETE, EMPTY, SUCCESS } from "@/lib/copy";
 import type { Task } from "@/lib/types/tasks";
+import { AddTaskDialog } from "./dialogs/AddTaskDialog";
+import { AddColumnPopover } from "./dialogs/AddColumnPopover";
+import { RenameBoardDialog } from "./dialogs/RenameBoardDialog";
+import { TaskSheetWrapper } from "./TaskSheetWrapper";
 
 type Client = { id: string; name: string };
 type Project = {
@@ -104,22 +87,9 @@ export function KanbanShell({
   // Board delete
   const [deleting, setDeleting] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
-  const [renameName, setRenameName] = useState("");
-
-  // Add Column popover state
-  const [addColOpen, setAddColOpen] = useState(false);
-  const [addColName, setAddColName] = useState("");
 
   // Add Task dialog state
   const [addTaskOpen, setAddTaskOpen] = useState(false);
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [newTaskColumnId, setNewTaskColumnId] = useState<string>("");
-  const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>("low");
-  const [newTaskAssigneeId, setNewTaskAssigneeId] = useState<string>("__none__");
-  const [newTaskDueDate, setNewTaskDueDate] = useState("");
-  const [newTaskClientId, setNewTaskClientId] = useState<string>("__none__");
-  const [newTaskManagerId, setNewTaskManagerId] = useState<string>("__none__");
-  const [newTaskCreating, setNewTaskCreating] = useState(false);
 
   // ─── New feature state ──────────────────────────────────────────────────
   const [filters, setFilters] = useState<TaskFilters>(() => {
@@ -222,44 +192,7 @@ export function KanbanShell({
     [columns, filters]
   );
 
-  // ─── Reset Add Task dialog defaults when dialog opens ─────────────────
-
-  async function openAddTaskDialog() {
-    setNewTaskTitle("");
-    setNewTaskColumnId(columns.length > 0 ? columns[0].id : "");
-    setNewTaskPriority("low");
-    setNewTaskAssigneeId("__none__");
-    setNewTaskDueDate("");
-    setNewTaskClientId("__none__");
-    setNewTaskManagerId("__none__");
-    setAddTaskOpen(true);
-    // Refresh clients and profiles so newly added ones appear in dropdowns
-    try {
-      const [freshClients, freshProfiles] = await Promise.all([
-        getClients(),
-        getProfiles(),
-      ]);
-      if (freshClients) setClients(freshClients);
-      if (freshProfiles) setProfiles(freshProfiles);
-    } catch {}
-  }
-
   // ─── Handlers ─────────────────────────────────────────────────────────
-
-  async function handleRenameBoard() {
-    if (!selectedProjectId || !renameName.trim()) return;
-    const trimmed = renameName.trim();
-    try {
-      await renameProject(selectedProjectId, trimmed);
-      setProjects((prev) =>
-        prev.map((p) => (p.id === selectedProjectId ? { ...p, name: trimmed } : p))
-      );
-      setRenameOpen(false);
-      toast.success(SUCCESS.boardRenamed);
-    } catch {
-      toast.error("Couldn't rename the board. Try again?");
-    }
-  }
 
   async function handleDeleteBoard() {
     if (!selectedProjectId) return;
@@ -277,119 +210,45 @@ export function KanbanShell({
     }
   }
 
-  async function handleAddColumn() {
-    if (!selectedProjectId) return;
-    const trimmed = addColName.trim();
-    if (!trimmed) return;
-    setAddColName("");
-    setAddColOpen(false);
-    try {
-      const col = await createColumn(selectedProjectId, trimmed);
-      setColumns((prev) => [...prev, { ...col, tasks: [] }]);
-    } catch {
-      toast.error("Column didn't save. Try again?");
-    }
+  function handleRefresh() {
+    loadData();
+    if (selectedProjectId) loadBoard(selectedProjectId);
   }
 
-  async function handleAddTask() {
-    if (!selectedProjectId || !newTaskColumnId) return;
-    const trimmed = newTaskTitle.trim();
-    if (!trimmed) return;
+  // ─── Add Task optimistic callback ─────────────────────────────────────
 
-    setNewTaskCreating(true);
-
-    // Optimistic: show the card instantly
-    const tempId = `temp-${Date.now()}`;
-    const optimisticTask = {
-      id: tempId,
-      project_id: selectedProjectId,
-      column_id: newTaskColumnId,
-      title: trimmed,
-      priority: newTaskPriority,
-      due_date: newTaskDueDate || null,
-      client_id: newTaskClientId !== "__none__" ? newTaskClientId : null,
-      position: Date.now(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    } as Task;
-    setColumns((prev) =>
-      prev.map((c) =>
-        c.id === newTaskColumnId
-          ? { ...c, tasks: [...(c.tasks || []), optimisticTask] }
-          : c
-      )
-    );
-    setAddTaskOpen(false);
-    toast.success(SUCCESS.taskCreated);
-
-    try {
-      const resolvedClientId = newTaskClientId !== "__none__" ? newTaskClientId : null;
-      if (!resolvedClientId) {
-        toast.error("Client is required. Select a client or create one in the Clients section first.");
-        setNewTaskCreating(false);
-        // Remove optimistic card
-        setColumns((prev) =>
-          prev.map((c) =>
-            c.id === newTaskColumnId
-              ? { ...c, tasks: (c.tasks || []).filter((t) => t.id !== tempId) }
-              : c
-          )
-        );
-        return;
-      }
-
-      const resolvedManagerId = newTaskManagerId !== "__none__" ? newTaskManagerId : null;
-      const task = await createTask(selectedProjectId, newTaskColumnId, trimmed, {
-        priority: newTaskPriority,
-        due_date: newTaskDueDate || null,
-        client_id: resolvedClientId,
-        manager_id: resolvedManagerId,
-      });
-
-      // Add assignee if selected
-      if (newTaskAssigneeId !== "__none__") {
-        await addAssignee(task.id, newTaskAssigneeId);
-        const assigneeProfile = profiles.find((p) => p.id === newTaskAssigneeId);
-        if (assigneeProfile) {
-          task.assignees = [
-            {
-              task_id: task.id,
-              user_id: assigneeProfile.id,
-              profiles: {
-                full_name: assigneeProfile.full_name,
-                avatar_url: assigneeProfile.avatar_url,
-              },
-            },
-          ];
-        }
-      }
-
-      // Replace temp card with real one
+  function handleTaskCreated(task: Task, columnId: string, tempId: string) {
+    if (!task) {
+      // Remove the optimistic card (failure or validation error)
       setColumns((prev) =>
         prev.map((c) =>
-          c.id === newTaskColumnId
-            ? { ...c, tasks: (c.tasks || []).map((t) => t.id === tempId ? task : t) }
-            : c
-        )
-      );
-    } catch {
-      // Remove the optimistic card on failure
-      setColumns((prev) =>
-        prev.map((c) =>
-          c.id === newTaskColumnId
+          c.id === columnId
             ? { ...c, tasks: (c.tasks || []).filter((t) => t.id !== tempId) }
             : c
         )
       );
-      toast.error("That task didn't save. Give it another shot.");
-    } finally {
-      setNewTaskCreating(false);
+      return;
     }
-  }
 
-  function handleRefresh() {
-    loadData();
-    if (selectedProjectId) loadBoard(selectedProjectId);
+    if (task.id === tempId) {
+      // Optimistic: add the temp card
+      setColumns((prev) =>
+        prev.map((c) =>
+          c.id === columnId
+            ? { ...c, tasks: [...(c.tasks || []), task] }
+            : c
+        )
+      );
+    } else {
+      // Replace temp card with real one
+      setColumns((prev) =>
+        prev.map((c) =>
+          c.id === columnId
+            ? { ...c, tasks: (c.tasks || []).map((t) => t.id === tempId ? task : t) }
+            : c
+        )
+      );
+    }
   }
 
   // ─── Task click handler for non-kanban views ──────────────────────────
@@ -465,7 +324,6 @@ export function KanbanShell({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                   <DropdownMenuItem onClick={() => {
-                    setRenameName(selectedBoard?.name || "");
                     setRenameOpen(true);
                   }}>
                     <Pencil className="mr-2 h-4 w-4" />
@@ -500,32 +358,17 @@ export function KanbanShell({
             </AlertDialog>
 
             {/* Rename Board Dialog */}
-            <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
-              <DialogContent className="sm:max-w-sm">
-                <DialogHeader>
-                  <DialogTitle>Rename Board</DialogTitle>
-                </DialogHeader>
-                <div className="py-2">
-                  <Input
-                    value={renameName}
-                    onChange={(e) => setRenameName(e.target.value)}
-                    placeholder="Board name"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleRenameBoard();
-                    }}
-                  />
-                </div>
-                <DialogFooter>
-                  <DialogClose asChild>
-                    <Button variant="ghost" size="sm">Cancel</Button>
-                  </DialogClose>
-                  <Button size="sm" onClick={handleRenameBoard} disabled={!renameName.trim()}>
-                    Rename
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <RenameBoardDialog
+              open={renameOpen}
+              onOpenChange={setRenameOpen}
+              projectId={selectedProjectId}
+              currentName={selectedBoard?.name || ""}
+              onRenamed={(newName) => {
+                setProjects((prev) =>
+                  prev.map((p) => (p.id === selectedProjectId ? { ...p, name: newName } : p))
+                );
+              }}
+            />
             </>
           )}
 
@@ -549,224 +392,23 @@ export function KanbanShell({
           {selectedProjectId && (
             <>
               {/* ─── Add Task Dialog ─── */}
-              <Dialog open={addTaskOpen} onOpenChange={setAddTaskOpen}>
-                <DialogTrigger asChild>
-                  <Button
-                    size="sm"
-                    className="h-9"
-                    onClick={openAddTaskDialog}
-                  >
-                    <Plus className="mr-1 h-4 w-4" />
-                    Add Task
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>New Task</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-2">
-                    {/* Title */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor="task-title" className="text-sm">
-                        Title <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="task-title"
-                        value={newTaskTitle}
-                        onChange={(e) => setNewTaskTitle(e.target.value)}
-                        placeholder="What needs doing?"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !newTaskCreating) handleAddTask();
-                        }}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Status / Column */}
-                      <div className="space-y-1.5">
-                        <Label className="text-sm">Status</Label>
-                        <Select
-                          value={newTaskColumnId}
-                          onValueChange={setNewTaskColumnId}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Select column" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {columns.map((col) => (
-                              <SelectItem key={col.id} value={col.id}>
-                                {col.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Priority */}
-                      <div className="space-y-1.5">
-                        <Label className="text-sm">Priority</Label>
-                        <Select
-                          value={newTaskPriority}
-                          onValueChange={(v) =>
-                            setNewTaskPriority(v as TaskPriority)
-                          }
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="low">Low</SelectItem>
-                            <SelectItem value="medium">Medium</SelectItem>
-                            <SelectItem value="high">High</SelectItem>
-                            <SelectItem value="urgent">Urgent</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Client (required) */}
-                      <div className="space-y-1.5">
-                        <Label className="text-sm">Client <span className="text-destructive">*</span></Label>
-                        {clients.length === 0 ? (
-                          <p className="text-xs text-muted-foreground py-2">
-                            No clients yet.{" "}
-                            <a href="/clients" className="text-primary underline">Create a client first</a>
-                          </p>
-                        ) : (
-                          <Select
-                            value={newTaskClientId}
-                            onValueChange={setNewTaskClientId}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder="Select client" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__" disabled>Select client</SelectItem>
-                              {clients.map((c) => (
-                                <SelectItem key={c.id} value={c.id}>
-                                  {c.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                      </div>
-
-                      {/* Assignee */}
-                      <div className="space-y-1.5">
-                        <Label className="text-sm">Assignee</Label>
-                        <Select
-                          value={newTaskAssigneeId}
-                          onValueChange={setNewTaskAssigneeId}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Unassigned" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">Unassigned</SelectItem>
-                            {profiles.map((p) => (
-                              <SelectItem key={p.id} value={p.id}>
-                                {p.full_name || "Unnamed"}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Manager */}
-                      <div className="space-y-1.5">
-                        <Label className="text-sm">Manager <span className="text-destructive">*</span></Label>
-                        <Select
-                          value={newTaskManagerId}
-                          onValueChange={setNewTaskManagerId}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Select manager" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__" disabled>Select manager</SelectItem>
-                            {profiles.filter((p) => p.is_manager).map((p) => (
-                              <SelectItem key={p.id} value={p.id}>
-                                {p.full_name || "Unnamed"}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Due Date */}
-                      <div className="space-y-1.5">
-                        <Label className="text-sm">Due Date</Label>
-                        <Input
-                          type="date"
-                          value={newTaskDueDate}
-                          onChange={(e) => setNewTaskDueDate(e.target.value)}
-                          className="h-9"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <DialogClose asChild>
-                      <Button variant="ghost" size="sm">
-                        Cancel
-                      </Button>
-                    </DialogClose>
-                    <Button
-                      size="sm"
-                      onClick={handleAddTask}
-                      disabled={newTaskCreating || !newTaskTitle.trim() || newTaskClientId === "__none__" || newTaskManagerId === "__none__"}
-                    >
-                      {newTaskCreating ? "Creating..." : "Create Task"}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              <AddTaskDialog
+                open={addTaskOpen}
+                onOpenChange={setAddTaskOpen}
+                columns={columns}
+                clients={clients}
+                profiles={profiles}
+                projectId={selectedProjectId}
+                onTaskCreated={handleTaskCreated}
+                onClientsRefreshed={setClients}
+                onProfilesRefreshed={setProfiles}
+              />
 
               {/* ─── Add Column Popover ─── */}
-              <Popover open={addColOpen} onOpenChange={setAddColOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-9">
-                    <Columns3 className="mr-1 h-4 w-4" />
-                    Add Column
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-3" align="end">
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">New Column</p>
-                    <Input
-                      value={addColName}
-                      onChange={(e) => setAddColName(e.target.value)}
-                      placeholder="e.g., In Progress"
-                      className="h-8 text-sm"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleAddColumn();
-                        if (e.key === "Escape") {
-                          setAddColOpen(false);
-                          setAddColName("");
-                        }
-                      }}
-                    />
-                    <div className="flex gap-2">
-                      <Button size="sm" className="h-7" onClick={handleAddColumn}>
-                        Add
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7"
-                        onClick={() => {
-                          setAddColOpen(false);
-                          setAddColName("");
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
+              <AddColumnPopover
+                projectId={selectedProjectId}
+                onColumnCreated={(col) => setColumns((prev) => [...prev, col])}
+              />
             </>
           )}
         </div>
@@ -869,92 +511,5 @@ export function KanbanShell({
         </div>
       )}
     </div>
-  );
-}
-
-function TaskSheetWrapper({
-  taskId,
-  columns,
-  profiles,
-  clients,
-  onClose,
-  setColumns,
-  subtasksMap,
-  onSubtasksChange,
-}: {
-  taskId: string | null;
-  columns: ProjectColumn[];
-
-  profiles: { id: string; full_name: string; avatar_url: string | null; avatar_color: string | null }[];
-  clients: { id: string; name: string }[];
-  onClose: () => void;
-  setColumns: React.Dispatch<React.SetStateAction<ProjectColumn[]>>;
-  subtasksMap: Record<string, Subtask[]>;
-  onSubtasksChange: (taskId: string, subtasks: Subtask[]) => void;
-}) {
-  // Find the task from columns for instant rendering
-  const initialTask = taskId
-    ? columns.flatMap((c) => c.tasks || []).find((t) => t.id === taskId) ?? null
-    : null;
-
-  function handleTaskUpdated(updatedTask: Task) {
-    setColumns((prev) =>
-      prev.map((col) => ({
-        ...col,
-        tasks: (col.tasks || []).map((t) =>
-          t.id === updatedTask.id ? { ...t, ...updatedTask } : t
-        ),
-      }))
-    );
-  }
-
-  function handleTaskDeleted(deletedId: string) {
-    setColumns((prev) =>
-      prev.map((col) => ({
-        ...col,
-        tasks: (col.tasks || []).filter((t) => t.id !== deletedId),
-      }))
-    );
-    onClose();
-  }
-
-  function handleTaskStatusChanged(movedTaskId: string, newColumnId: string) {
-    let movedTask: Task | null = null;
-    setColumns((prev) => {
-      const updated = prev.map((col) => ({
-        ...col,
-        tasks: (col.tasks || []).filter((t) => {
-          if (t.id === movedTaskId) {
-            movedTask = { ...t, column_id: newColumnId };
-            return false;
-          }
-          return true;
-        }),
-      }));
-      if (movedTask) {
-        return updated.map((col) =>
-          col.id === newColumnId
-            ? { ...col, tasks: [...(col.tasks || []), movedTask!] }
-            : col
-        );
-      }
-      return updated;
-    });
-  }
-
-  return (
-    <TaskSheet
-      taskId={taskId}
-      initialTask={initialTask}
-      columns={columns}
-      profiles={profiles}
-      clients={clients}
-      onClose={onClose}
-      onTaskUpdated={handleTaskUpdated}
-      onTaskStatusChanged={handleTaskStatusChanged}
-      onTaskDeleted={handleTaskDeleted}
-      subtasksMap={subtasksMap}
-      onSubtasksChange={onSubtasksChange}
-    />
   );
 }

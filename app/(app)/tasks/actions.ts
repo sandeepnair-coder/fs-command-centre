@@ -4,18 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentMember } from "@/lib/auth/getCurrentMember";
 import { revalidatePath } from "next/cache";
 import type { TaskPriority } from "@/lib/types/tasks";
+import { getClientOptions, getActiveMembers, generateSignedUrls, isCompletionColumn } from "@/lib/data/shared-lookups";
 
 // ─── Clients ─────────────────────────────────────────────────────────────────
 
 export async function getClients() {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("clients")
-    .select("id, name")
-    .order("name")
-    .limit(200);
-  if (error) throw error;
-  return data;
+  return getClientOptions();
 }
 
 // createClientSimple REMOVED — client creation must go through /clients page or /api/v1/upsert-client.
@@ -356,8 +350,7 @@ export async function moveTask(
   const supabase = await createClient();
 
   const { data: col } = await supabase.from("project_columns").select("name").eq("id", newColumnId).single();
-  const colName = (col?.name || "").toLowerCase();
-  const isDone = colName.includes("done") || colName.includes("approved") || colName.includes("completed") || colName.includes("closed");
+  const isDone = isCompletionColumn(col?.name || "");
 
   if (isDone) {
     const { count } = await supabase.from("task_links").select("id", { count: "exact", head: true }).eq("task_id", taskId);
@@ -465,24 +458,7 @@ export async function getTaskDetail(taskId: string) {
 // ─── Assignees ───────────────────────────────────────────────────────────────
 
 export async function getProfiles() {
-  const supabase = await createClient();
-  // Get active members — use members table directly (Clerk-based)
-  const { data: members, error } = await supabase
-    .from("members")
-    .select("id, full_name, avatar_url, clerk_id, email, is_manager, role")
-    .eq("status", "active")
-    .order("full_name");
-  if (error) throw error;
-
-  // Return in the Profile shape expected by the rest of the app
-  // Use member DB id (UUID) — compatible with task_assignees FK
-  return (members || []).map((m) => ({
-    id: m.id,
-    full_name: m.full_name || m.email?.split("@")[0] || "Unknown",
-    avatar_url: m.avatar_url || null,
-    avatar_color: null,
-    is_manager: m.is_manager || m.role === "owner",
-  }));
+  return getActiveMembers();
 }
 
 export async function addAssignee(taskId: string, userId: string) {
