@@ -1,6 +1,9 @@
 import { connection } from "next/server";
 import { getActiveVersion, getVersions, getVersionData, getChangeLog } from "./actions";
 import { RateCardClient } from "./_client";
+import {
+  MOCK_VERSION, MOCK_VERSIONS, MOCK_TIERS, MOCK_ITEMS, MOCK_DELIVERABLES, MOCK_CHANGES
+} from "@/lib/rate-card/mock-data";
 
 export default async function RateCardPage() {
   await connection();
@@ -26,14 +29,16 @@ export default async function RateCardPage() {
     changes = log;
   }
 
+  const useMock = !activeVersion || items.length === 0;
+
   return (
     <RateCardClient
-      initialVersion={activeVersion}
-      initialVersions={versions}
-      initialTiers={tiers}
-      initialItems={items}
-      initialDeliverables={deliverables}
-      initialChanges={changes}
+      initialVersion={useMock ? MOCK_VERSION : activeVersion}
+      initialVersions={useMock ? MOCK_VERSIONS : versions}
+      initialTiers={useMock ? MOCK_TIERS : tiers}
+      initialItems={useMock ? MOCK_ITEMS : items}
+      initialDeliverables={useMock ? MOCK_DELIVERABLES : deliverables}
+      initialChanges={useMock ? MOCK_CHANGES : changes}
     />
   );
 }
