@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { createSow, updateSow, getNextSowRef, type SowRow } from "./actions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +24,8 @@ type Props = {
   version: RateCardVersion;
   tiers: RateCardTier[];
   items: RateCardItem[];
+  editingSow?: SowRow | null;
+  onSaved?: () => void;
 };
 
 type GmPlanType = "volume" | "alacarte" | "pilot";
@@ -46,11 +49,11 @@ const UPFRONT_OPTIONS = [
 ] as const;
 
 const SURCHARGES = [
-  { label: "Same-day rush (<12 hr)", value: "+30%" },
-  { label: "Scope change after storyboard", value: "+50%" },
-  { label: "Brief change after delivery", value: "+100%" },
-  { label: "Talent / music licensing", value: "cost +15%" },
-  { label: "Language pack (per lang beyond included)", value: "+25%" },
+  { label: "Same-day rush", desc: "Delivery in under 12 hours", value: "+30%" },
+  { label: "Scope change", desc: "After storyboard approval", value: "+50%" },
+  { label: "Brief change", desc: "After final delivery", value: "+100%" },
+  { label: "Talent / music", desc: "Licensed assets, pass-through", value: "cost +15%" },
+  { label: "Language pack", desc: "Per language beyond included", value: "+25%" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -101,7 +104,9 @@ function FieldLabel({
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export function SoWBuilderClient({ version, tiers, items }: Props) {
+export function SoWBuilderClient({ version, tiers, items, editingSow, onSaved }: Props) {
+  const [sowId, setSowId] = useState<string | null>(editingSow?.id ?? null);
+  const [saving, setSaving] = useState(false);
   // Live FX rate
   const [liveFxRate, setLiveFxRate] = useState<number | null>(null);
   const fxRate = liveFxRate ?? version.fx_rate;
@@ -368,10 +373,10 @@ export function SoWBuilderClient({ version, tiers, items }: Props) {
 
   // ---- Render ----
   return (
-    <div className="flex-1 flex overflow-hidden relative max-w-[1400px] mx-auto w-full">
+    <div className="flex-1 flex overflow-hidden relative max-w-[1400px] mx-auto w-full gap-5">
       {/* ========== LEFT: CONFIG ========== */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide border-r">
-        <div className="p-5 space-y-4">
+      <div className="flex-1 overflow-y-auto scrollbar-hide">
+        <div className="p-5 pl-0 space-y-4">
         {/* Step 1: Customer */}
         <section className="bg-card rounded-lg border overflow-hidden">
           <StepHeader label="1 · Customer" meta="Linked to Clients module" />
@@ -836,16 +841,19 @@ export function SoWBuilderClient({ version, tiers, items }: Props) {
             {/* Surcharges */}
             <div className="border-t pt-3">
               <div className="text-[11px] font-bold text-muted-foreground uppercase mb-2">
-                Surcharges (not discountable)
+                Surcharges · applied on list price · not discountable
               </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+              <div className="space-y-1.5">
                 {SURCHARGES.map((s) => (
                   <div
                     key={s.label}
-                    className="flex justify-between bg-muted/50 rounded px-2 py-1.5"
+                    className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2"
                   >
-                    <span>{s.label}</span>
-                    <span className="font-semibold text-red-600">
+                    <div>
+                      <div className="text-xs font-medium text-foreground">{s.label}</div>
+                      <div className="text-[11px] text-muted-foreground">{s.desc}</div>
+                    </div>
+                    <span className="text-xs font-bold text-red-600 dark:text-red-400 shrink-0 ml-4">
                       {s.value}
                     </span>
                   </div>
@@ -860,7 +868,7 @@ export function SoWBuilderClient({ version, tiers, items }: Props) {
       </div>
 
       {/* Sticky action bar */}
-      <div className="absolute bottom-0 left-0 right-[400px] bg-card/95 backdrop-blur-sm border-t px-6 py-3 flex items-center justify-between z-30">
+      <div className="absolute bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t px-6 py-3 flex items-center justify-between z-30">
         <div className="text-xs">
           {clientName ? (
             <span className="text-muted-foreground">{clientName} · {selectedTier?.name ?? "India"} · {gmEnabled ? "Gen Media" : ""}{gmEnabled && mkEnabled ? " + " : ""}{mkEnabled ? "Marketing" : ""}</span>
@@ -873,13 +881,52 @@ export function SoWBuilderClient({ version, tiers, items }: Props) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              const draft = { clientName, brandName, buyerName, salesDri, selectedTierKey, gmEnabled, mkEnabled, gmPlanType, mkPlanType, selectedGmTier, selectedMkTier, alacarteQtys, campaignQtys, strategicQtys, discount, upfront, months };
-              localStorage.setItem("sow_draft", JSON.stringify(draft));
-              toast.success("Draft saved locally");
+            disabled={saving || !clientName.trim()}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                const rowData = {
+                  sow_ref: sowId ? undefined! : await getNextSowRef(),
+                  client_name: clientName,
+                  brand_name: brandName || null,
+                  buyer_name: buyerName || null,
+                  sales_dri: salesDri || null,
+                  selected_tier_key: selectedTierKey,
+                  tier_name: selectedTier?.name ?? "",
+                  gm_enabled: gmEnabled,
+                  mk_enabled: mkEnabled,
+                  gm_plan_type: gmPlanType,
+                  mk_plan_type: mkPlanType,
+                  selected_gm_tier: selectedGmTier || null,
+                  selected_mk_tier: selectedMkTier || null,
+                  discount,
+                  upfront,
+                  months,
+                  net_monthly: Math.round(netMonthly),
+                  annual_value: Math.round(annualValue),
+                  currency,
+                  symbol,
+                  status: "draft" as const,
+                };
+
+                if (sowId) {
+                  const { sow_ref: _, ...updates } = rowData;
+                  await updateSow(sowId, updates);
+                } else {
+                  const created = await createSow(rowData as Parameters<typeof createSow>[0]);
+                  setSowId(created.id);
+                }
+                setLastSaved(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }));
+                toast.success("Draft saved");
+                onSaved?.();
+              } catch {
+                toast.error("Failed to save draft");
+              } finally {
+                setSaving(false);
+              }
             }}
           >
-            Save Draft
+            {saving ? "Saving..." : "Save Draft"}
           </Button>
           <Button
             size="sm"
@@ -898,14 +945,14 @@ export function SoWBuilderClient({ version, tiers, items }: Props) {
       </div>
 
       {/* ========== RIGHT: LIVE PREVIEW ========== */}
-      <div className="w-[400px] shrink-0 flex flex-col overflow-hidden border-l bg-muted/20">
-        <div className="px-4 py-3 text-xs font-bold flex items-center justify-between shrink-0 border-b bg-card">
+      <div className="w-[380px] shrink-0 flex flex-col overflow-hidden mt-5 mb-16 mr-0 bg-card border rounded-xl shadow-sm">
+        <div className="px-4 py-3 text-xs font-bold flex items-center justify-between shrink-0 border-b">
           <span className="text-foreground">Live preview</span>
           <span className="font-normal text-muted-foreground text-[11px]">
             {selectedTier.name} &middot; {currency} &middot; {multiplier}&times;
           </span>
         </div>
-        <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-3">
+        <div className="flex-1 overflow-y-auto scrollbar-hide p-3 space-y-3 bg-muted/30">
           {!clientName.trim() && !buyerName.trim() ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mb-3">
@@ -1120,12 +1167,6 @@ export function SoWBuilderClient({ version, tiers, items }: Props) {
           )}
         </div>
 
-        {/* Preview footer */}
-        <div className="border-t px-4 py-2.5 bg-card shrink-0">
-          <div className="text-[10px] text-muted-foreground text-center">
-            Rate card {version.version_label} · {currency} · {selectedTier?.name}
-          </div>
-        </div>
       </div>
 
       {/* ========== SOW DOCUMENT MODAL ========== */}
@@ -1491,7 +1532,9 @@ function AlacarteTable({
                   type="number"
                   min={0}
                   className="w-14 h-7 px-1.5 text-xs text-center border rounded bg-card text-primary font-bold focus:outline-emerald-500"
-                  value={qty}
+                  value={qty || ""}
+                  placeholder="0"
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) =>
                     setQtys((prev) => ({
                       ...prev,
@@ -1566,7 +1609,9 @@ function QtyItemList({
               type="number"
               min={0}
               className="w-14 h-7 px-1.5 text-xs text-center border rounded bg-card text-primary font-bold focus:outline-emerald-500"
-              value={qty}
+              value={qty || ""}
+              placeholder="0"
+              onFocus={(e) => e.target.select()}
               onChange={(e) =>
                 setQtys((prev) => ({
                   ...prev,

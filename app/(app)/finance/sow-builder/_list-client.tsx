@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { RateCardVersion, RateCardTier, RateCardItem } from "@/lib/types/rate-card";
 import { SoWBuilderClient } from "./_client";
+import { createSow, deleteSow, getSows, getNextSowRef, type SowRow } from "./actions";
 
 type SoWDraft = {
   id: string;
@@ -68,21 +69,60 @@ function fmtPrice(amount: number, symbol: string): string {
   return `${symbol}${amount.toLocaleString("en-IN")}`;
 }
 
-// Demo SoWs for initial display
-const DEMO_SOWS: SoWDraft[] = [
-  {
-    id: "demo-1", sowRef: "FS-SOW-2026-001", clientName: "GreenLeaf Organics", brandName: "GreenLeaf", buyerName: "Priya Sharma, CMO", salesDri: "Deepak N.", selectedTierKey: "india", tierName: "India + Reliance", gmEnabled: true, mkEnabled: true, gmPlanType: "volume", mkPlanType: "brand", selectedGmTier: "vol_pro", selectedMkTier: "br_starter", discount: 10, upfront: 5, months: 12, netMonthly: 413750, annualValue: 4965000, currency: "INR", symbol: "₹", status: "accepted", createdAt: "2026-05-08T10:00:00Z", updatedAt: "2026-05-09T14:00:00Z",
-  },
-  {
-    id: "demo-2", sowRef: "FS-SOW-2026-002", clientName: "BlueWave Tech", brandName: "BlueWave", buyerName: "Arun K., VP Marketing", salesDri: "Neha M.", selectedTierKey: "mea_t1", tierName: "MEA T1 · UAE + GCC", gmEnabled: true, mkEnabled: false, gmPlanType: "volume", mkPlanType: "brand", selectedGmTier: "vol_pro", selectedMkTier: "br_starter", discount: 5, upfront: 0, months: 12, netMonthly: 11446, annualValue: 137352, currency: "USD", symbol: "$", status: "sent", createdAt: "2026-05-10T09:00:00Z", updatedAt: "2026-05-10T09:00:00Z",
-  },
-  {
-    id: "demo-3", sowRef: "FS-SOW-2026-003", clientName: "Spice Junction", brandName: "Spice Junction", buyerName: "Rahul P.", salesDri: "Deepak N.", selectedTierKey: "india", tierName: "India + Reliance", gmEnabled: true, mkEnabled: false, gmPlanType: "volume", mkPlanType: "brand", selectedGmTier: "vol_pro", selectedMkTier: "br_starter", discount: 10, upfront: 5, months: 12, netMonthly: 213750, annualValue: 2565000, currency: "INR", symbol: "₹", status: "draft", createdAt: "2026-05-12T11:00:00Z", updatedAt: "2026-05-12T11:00:00Z",
-  },
-  {
-    id: "demo-4", sowRef: "FS-SOW-2026-004", clientName: "FreshBrew", brandName: "FreshBrew Tea", buyerName: "Meera S.", salesDri: "Sandeep N.", selectedTierKey: "sea_t1", tierName: "SEA T1 · Singapore", gmEnabled: false, mkEnabled: true, gmPlanType: "volume", mkPlanType: "brand", selectedGmTier: "vol_starter", selectedMkTier: "br_pro", discount: 15, upfront: 10, months: 6, netMonthly: 25094, annualValue: 150563, currency: "USD", symbol: "$", status: "rejected", createdAt: "2026-05-05T08:00:00Z", updatedAt: "2026-05-07T16:00:00Z",
-  },
-];
+function rowToDraft(row: SowRow): SoWDraft {
+  return {
+    id: row.id,
+    sowRef: row.sow_ref,
+    clientName: row.client_name,
+    brandName: row.brand_name ?? "",
+    buyerName: row.buyer_name ?? "",
+    salesDri: row.sales_dri ?? "",
+    selectedTierKey: row.selected_tier_key,
+    tierName: row.tier_name ?? "",
+    gmEnabled: row.gm_enabled,
+    mkEnabled: row.mk_enabled,
+    gmPlanType: row.gm_plan_type,
+    mkPlanType: row.mk_plan_type,
+    selectedGmTier: row.selected_gm_tier ?? "",
+    selectedMkTier: row.selected_mk_tier ?? "",
+    discount: Number(row.discount),
+    upfront: Number(row.upfront),
+    months: row.months,
+    netMonthly: Number(row.net_monthly),
+    annualValue: Number(row.annual_value),
+    currency: row.currency,
+    symbol: row.symbol,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function draftToRow(draft: SoWDraft): Omit<SowRow, "id" | "created_at" | "updated_at" | "created_by"> {
+  return {
+    sow_ref: draft.sowRef,
+    client_name: draft.clientName,
+    brand_name: draft.brandName || null,
+    buyer_name: draft.buyerName || null,
+    sales_dri: draft.salesDri || null,
+    selected_tier_key: draft.selectedTierKey,
+    tier_name: draft.tierName || null,
+    gm_enabled: draft.gmEnabled,
+    mk_enabled: draft.mkEnabled,
+    gm_plan_type: draft.gmPlanType,
+    mk_plan_type: draft.mkPlanType,
+    selected_gm_tier: draft.selectedGmTier || null,
+    selected_mk_tier: draft.selectedMkTier || null,
+    discount: draft.discount,
+    upfront: draft.upfront,
+    months: draft.months,
+    net_monthly: draft.netMonthly,
+    annual_value: draft.annualValue,
+    currency: draft.currency,
+    symbol: draft.symbol,
+    status: draft.status,
+  };
+}
 
 type SortKey = "sowRef" | "clientName" | "tierName" | "netMonthly" | "status" | "createdAt";
 type SortDir = "asc" | "desc";
@@ -92,14 +132,15 @@ const STATUS_ORDER: Record<string, number> = {
 };
 
 type Props = {
+  initialSows: SowRow[];
   version: RateCardVersion;
   tiers: RateCardTier[];
   items: RateCardItem[];
 };
 
-export function SoWListClient({ version, tiers, items }: Props) {
+export function SoWListClient({ initialSows, version, tiers, items }: Props) {
   const [view, setView] = useState<"list" | "builder">("list");
-  const [sows, setSows] = useState<SoWDraft[]>(DEMO_SOWS);
+  const [sows, setSows] = useState<SoWDraft[]>(() => initialSows.map(rowToDraft));
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
@@ -118,17 +159,6 @@ export function SoWListClient({ version, tiers, items }: Props) {
     if (typeof window !== "undefined") return localStorage.getItem("sow_tip_dismissed") === "1";
     return false;
   });
-
-  // Load saved drafts from localStorage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("sow_drafts");
-      if (saved) {
-        const parsed = JSON.parse(saved) as SoWDraft[];
-        setSows([...parsed, ...DEMO_SOWS]);
-      }
-    } catch {}
-  }, []);
 
   const filtered = sows.filter((s) => {
     if (statusFilter !== "all" && s.status !== statusFilter) return false;
@@ -158,7 +188,35 @@ export function SoWListClient({ version, tiers, items }: Props) {
             Back to SoW list
           </Button>
         </div>
-        <SoWBuilderClient version={version} tiers={tiers} items={items} />
+        <SoWBuilderClient
+          version={version}
+          tiers={tiers}
+          items={items}
+          onSaved={async () => {
+            const fresh = await getSows();
+            setSows(fresh.map(rowToDraft));
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (sows.length === 0) {
+    return (
+      <div className="max-w-[1400px] mx-auto">
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-5">
+            <FileText className="h-8 w-8 text-primary" />
+          </div>
+          <h2 className="text-lg font-semibold text-foreground mb-1">No Statements of Work yet</h2>
+          <p className="text-sm text-muted-foreground max-w-md mb-6">
+            Create your first SoW to generate pricing proposals from your rate card. Each SoW tracks scope, commercials, and payment terms.
+          </p>
+          <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5" onClick={() => setView("builder")}>
+            <Plus className="h-4 w-4" />
+            Create your first SoW
+          </Button>
+        </div>
       </div>
     );
   }
@@ -275,19 +333,16 @@ export function SoWListClient({ version, tiers, items }: Props) {
                         Edit
                       </Button>
                     )}
-                    <Button variant="ghost" size="sm" className="h-7 text-xs text-foreground/70 hover:text-foreground gap-1" onClick={() => {
-                      const newId = `dup-${Date.now()}`;
-                      const newRef = `FS-SOW-${new Date().getFullYear()}-${String(sows.length + 1).padStart(3, "0")}`;
-                      const duplicate: SoWDraft = {
-                        ...sow,
-                        id: newId,
-                        sowRef: newRef,
-                        status: "draft",
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString(),
-                      };
-                      setSows((prev) => [duplicate, ...prev]);
-                      toast.success(`Duplicated as ${newRef}`);
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-foreground/70 hover:text-foreground gap-1" onClick={async () => {
+                      try {
+                        const newRef = await getNextSowRef();
+                        const rowData = draftToRow({ ...sow, sowRef: newRef, status: "draft" });
+                        const created = await createSow(rowData);
+                        setSows((prev) => [rowToDraft(created), ...prev]);
+                        toast.success(`Duplicated as ${newRef}`);
+                      } catch {
+                        toast.error("Failed to duplicate SoW");
+                      }
                     }}>
                       <Copy className="h-3 w-3" />
                       Duplicate
