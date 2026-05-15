@@ -21,7 +21,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Upload, Download, Clock, Plus, X, Pencil, Search, ChevronRight, Sparkles, Send, Loader2, BookOpen, ShieldCheck } from "lucide-react";
+import { Upload, Download, Clock, Plus, X, Pencil, Search, ChevronRight, Sparkles, Send, Loader2, BookOpen, ShieldCheck, GripVertical, Trash2 } from "lucide-react";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type {
   RateCardVersion,
   RateCardTier,
@@ -43,6 +46,11 @@ import {
   revertChange,
   getChangeLog,
   getVersionData,
+  createItem,
+  deleteItem,
+  reorderItems,
+  createTier,
+  deleteTier,
 } from "./actions";
 
 // ─── Props ─────────────────────────────────────────────────────────────────
@@ -84,6 +92,30 @@ const SECTION_GROUPS: { label: string; sections: RateCardSection[] }[] = [
   { label: "Marketing", sections: ["brand_retainer", "per_campaign", "strategic"] },
 ];
 
+function SortableRow({ id, editMode, children, className }: { id: string; editMode: boolean; children: React.ReactNode; className?: string }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = editMode ? {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    position: "relative" as const,
+    zIndex: isDragging ? 50 : undefined,
+  } : undefined;
+
+  return (
+    <tr ref={setNodeRef} style={style} className={className} {...(editMode ? attributes : {})}>
+      {editMode && (
+        <td className="px-1 py-3 text-center w-8">
+          <button {...listeners} className="cursor-grab active:cursor-grabbing touch-none">
+            <GripVertical className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600" />
+          </button>
+        </td>
+      )}
+      {children}
+    </tr>
+  );
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────
 
 export function RateCardClient({
@@ -104,6 +136,27 @@ export function RateCardClient({
   const [activeSection, setActiveSection] = useState<RateCardSection>("alacarte");
   const [changeLogOpen, setChangeLogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Add row state
+  const [addRowOpen, setAddRowOpen] = useState(false);
+  const [newRowName, setNewRowName] = useState("");
+  const [newRowLength, setNewRowLength] = useState("");
+  const [newRowSla, setNewRowSla] = useState("");
+  const [newRowBaseInr, setNewRowBaseInr] = useState("");
+  const [newRowFloor, setNewRowFloor] = useState("75");
+  const [newRowTierPrices, setNewRowTierPrices] = useState<Record<string, { list: string; floor: string }>>({});
+  const [addingRow, setAddingRow] = useState(false);
+
+  // Add tier state
+  const [addTierOpen, setAddTierOpen] = useState(false);
+  const [newTierName, setNewTierName] = useState("");
+  const [newTierRegion, setNewTierRegion] = useState("");
+  const [newTierLevel, setNewTierLevel] = useState("");
+  const [newTierMultiplier, setNewTierMultiplier] = useState("1.0");
+  const [newTierCurrency, setNewTierCurrency] = useState("USD");
+  const [newTierSymbol, setNewTierSymbol] = useState("$");
+  const [newTierItemPrices, setNewTierItemPrices] = useState<Record<string, { list: string; floor: string }>>({});
+  const [addingTier, setAddingTier] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [strategyOpen, setStrategyOpen] = useState(false);
@@ -117,12 +170,11 @@ export function RateCardClient({
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Inline edit state
-  type EditableField = "base_inr" | "sla" | "name" | "length" | "notes";
+  type EditableField = "base_inr" | "sla" | "name" | "length" | "notes" | "price_overrides";
   const [editingCell, setEditingCell] = useState<{
     itemId: string;
     field: EditableField;
     tierKey?: string;
-    tierMultiplier?: number;
     isFloor?: boolean;
   } | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -215,9 +267,9 @@ export function RateCardClient({
     [items]
   );
 
-  const startPriceEdit = useCallback(
-    (itemId: string, displayValue: number, tierKey: string, multiplier: number, isFloor: boolean) => {
-      setEditingCell({ itemId, field: "base_inr", tierKey, tierMultiplier: multiplier, isFloor });
+  const startTierOverrideEdit = useCallback(
+    (itemId: string, tierKey: string, displayValue: number, isFloor: boolean) => {
+      setEditingCell({ itemId, field: "price_overrides" as EditableField, tierKey, isFloor });
       setEditValue(String(displayValue));
       setTimeout(() => inputRef.current?.focus(), 0);
     },
@@ -236,18 +288,27 @@ export function RateCardClient({
     let finalNewValue = editValue;
     let finalOldValue = editingCell.field === "base_inr" ? String(item.base_inr) : String(item[editingCell.field] ?? "");
 
-    if (editingCell.tierKey && editingCell.tierMultiplier) {
-      const enteredUsd = Number(editValue);
-      if (isNaN(enteredUsd) || enteredUsd <= 0) { setEditingCell(null); return; }
-      let backCalcInr: number;
-      if (editingCell.isFloor) {
-        backCalcInr = Math.round((enteredUsd * fxRate) / (editingCell.tierMultiplier * (item.floor_percent / 100)));
-      } else {
-        backCalcInr = Math.round((enteredUsd * fxRate) / editingCell.tierMultiplier);
-      }
-      finalField = "base_inr";
-      finalNewValue = String(backCalcInr);
-      finalOldValue = String(item.base_inr);
+    if (editingCell.field === "price_overrides" && editingCell.tierKey) {
+      const entered = Number(editValue);
+      if (isNaN(entered) || entered <= 0) { setEditingCell(null); return; }
+      const existing = item.price_overrides ?? {};
+      const tierOv = existing[editingCell.tierKey] ?? {};
+      const priceField = editingCell.isFloor ? "floor" : "list";
+      const oldPrice = tierOv[priceField];
+      const tier = tiers.find(t => t.tier_key === editingCell.tierKey);
+      const computedPrices = computeAllTierPrices(item.base_inr, item.floor_percent, tiers, fxRate, existing);
+      const computedTier = computedPrices.find(p => p.tier_key === editingCell.tierKey);
+      const previousValue = oldPrice ?? (editingCell.isFloor ? computedTier?.floor : computedTier?.list) ?? 0;
+      const updatedOverrides = {
+        ...existing,
+        [editingCell.tierKey]: {
+          ...tierOv,
+          [priceField]: entered,
+        },
+      };
+      finalField = "price_overrides" as EditableField;
+      finalNewValue = JSON.stringify(updatedOverrides);
+      finalOldValue = String(previousValue);
     }
 
     if (finalNewValue === finalOldValue || finalNewValue.trim() === "") {
@@ -288,6 +349,8 @@ export function RateCardClient({
                 [reasonDialog.field]:
                   reasonDialog.field === "base_inr"
                     ? Number(reasonDialog.newValue)
+                    : reasonDialog.field === "price_overrides"
+                    ? JSON.parse(reasonDialog.newValue)
                     : reasonDialog.newValue,
               }
             : item
@@ -332,6 +395,133 @@ export function RateCardClient({
       setRevertDialog(null);
     }
   }, [revertDialog, version]);
+
+  // ── DnD reorder ──────────────────────────────────────────────────────
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
+
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = sectionItems.findIndex((i) => i.id === active.id);
+    const newIndex = sectionItems.findIndex((i) => i.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(sectionItems, oldIndex, newIndex);
+    const updates = reordered.map((item, idx) => ({ id: item.id, sort_order: idx }));
+
+    setItems((prev) => {
+      const otherItems = prev.filter((i) => !reordered.some((r) => r.id === i.id));
+      return [...otherItems, ...reordered.map((item, idx) => ({ ...item, sort_order: idx }))].sort((a, b) => a.sort_order - b.sort_order);
+    });
+
+    try {
+      await reorderItems(updates);
+    } catch {
+      toast.error("Failed to save order");
+    }
+  }, [sectionItems]);
+
+  // ── Add row handler ─────────────────────────────────────────────────
+
+  const handleAddRow = useCallback(async () => {
+    if (!version || !newRowName.trim() || !newRowBaseInr) return;
+    setAddingRow(true);
+    try {
+      const overrides: Record<string, { list?: number; floor?: number }> = {};
+      for (const [tierKey, vals] of Object.entries(newRowTierPrices)) {
+        const list = vals.list ? Number(vals.list) : undefined;
+        const floor = vals.floor ? Number(vals.floor) : undefined;
+        if (list || floor) overrides[tierKey] = { ...(list ? { list } : {}), ...(floor ? { floor } : {}) };
+      }
+      const created = await createItem(version.id, activeSection, {
+        name: newRowName.trim(),
+        length: newRowLength || undefined,
+        sla: newRowSla || undefined,
+        base_inr: Number(newRowBaseInr),
+        floor_percent: Number(newRowFloor) || 75,
+      });
+      if (Object.keys(overrides).length > 0) {
+        await updateItemField(created.id, "price_overrides", JSON.stringify(overrides), "Initial tier prices");
+        created.price_overrides = overrides;
+      }
+      setItems((prev) => [...prev, created]);
+      setAddRowOpen(false);
+      setNewRowName(""); setNewRowLength(""); setNewRowSla(""); setNewRowBaseInr(""); setNewRowFloor("75"); setNewRowTierPrices({});
+      toast.success("Row added");
+    } catch {
+      toast.error("Failed to add row");
+    } finally {
+      setAddingRow(false);
+    }
+  }, [version, activeSection, newRowName, newRowLength, newRowSla, newRowBaseInr, newRowFloor, newRowTierPrices]);
+
+  // ── Add tier handler ────────────────────────────────────────────────
+
+  const handleAddTier = useCallback(async () => {
+    if (!version || !newTierName.trim()) return;
+    setAddingTier(true);
+    try {
+      const tierKey = newTierName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+      const created = await createTier(version.id, {
+        name: newTierName.trim(),
+        region: newTierRegion || "Other",
+        tier_level: newTierLevel || "—",
+        multiplier: Number(newTierMultiplier) || 1.0,
+        currency: newTierCurrency,
+        symbol: newTierSymbol,
+        tier_key: tierKey,
+      });
+      for (const [itemId, vals] of Object.entries(newTierItemPrices)) {
+        const list = vals.list ? Number(vals.list) : undefined;
+        const floor = vals.floor ? Number(vals.floor) : undefined;
+        if (list || floor) {
+          const item = items.find((i) => i.id === itemId);
+          const existing = item?.price_overrides ?? {};
+          const updated = { ...existing, [created.tier_key]: { ...(list ? { list } : {}), ...(floor ? { floor } : {}) } };
+          await updateItemField(itemId, "price_overrides", JSON.stringify(updated), "Prices set for new tier");
+        }
+      }
+      // Refresh items to pick up overrides
+      if (version) {
+        const data = await getVersionData(version.id);
+        setItems(data.items);
+      }
+      setTiers((prev) => [...prev, created]);
+      setAddTierOpen(false);
+      setNewTierName(""); setNewTierRegion(""); setNewTierLevel(""); setNewTierMultiplier("1.0"); setNewTierCurrency("USD"); setNewTierSymbol("$"); setNewTierItemPrices({});
+      toast.success("Column added");
+    } catch {
+      toast.error("Failed to add column");
+    } finally {
+      setAddingTier(false);
+    }
+  }, [version, newTierName, newTierRegion, newTierLevel, newTierMultiplier, newTierCurrency, newTierSymbol, newTierItemPrices, items]);
+
+  // ── Delete handlers ─────────────────────────────────────────────────
+
+  const handleDeleteRow = useCallback(async (itemId: string) => {
+    try {
+      await deleteItem(itemId);
+      setItems((prev) => prev.filter((i) => i.id !== itemId));
+      toast.success("Row deleted");
+    } catch {
+      toast.error("Failed to delete row");
+    }
+  }, []);
+
+  const handleDeleteTier = useCallback(async (tierId: string) => {
+    try {
+      await deleteTier(tierId);
+      setTiers((prev) => prev.filter((t) => t.id !== tierId));
+      toast.success("Column deleted");
+    } catch {
+      toast.error("Failed to delete column");
+    }
+  }, []);
 
   // ── AI chat ───────────────────────────────────────────────────────────
 
@@ -548,7 +738,7 @@ export function RateCardClient({
         {SECTION_GROUPS.map((group, gi) => (
           <Fragment key={group.label}>
             {gi > 0 && <div className="w-px h-6 bg-border mx-1 shrink-0" />}
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold px-3 py-2.5 whitespace-nowrap shrink-0">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground/50 font-medium px-3 py-2.5 whitespace-nowrap shrink-0">
               {group.label}
             </span>
             {group.sections.map((section) => (
@@ -603,29 +793,17 @@ export function RateCardClient({
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
-      ) : !bannerDismissed && (
-        <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-md px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300 mb-3 flex items-center gap-2">
-          <Pencil className="h-3 w-3 shrink-0" />
-          <span className="flex-1">
-            Click any <strong>INR price</strong> or <strong>SLA</strong> cell to edit
-            inline — all USD tiers auto-update.
-          </span>
-          <button
-            onClick={() => setBannerDismissed(true)}
-            className="text-emerald-500 hover:text-emerald-700 shrink-0"
-            aria-label="Dismiss hint"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
+      ) : null}
 
       {/* ── Table ─────────────────────────────────────────────────────────── */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={sectionItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
       <div className="bg-card rounded-xl border shadow-sm overflow-x-auto scrollbar-hide">
         <table className="w-full text-[13px]" aria-label={`${SECTION_LABELS[activeSection]} rate card pricing`}>
           <thead>
             {/* Tier header row */}
             <tr className="bg-slate-50 dark:bg-slate-900 border-b">
+              {editMode && <th className="w-8 bg-slate-50 dark:bg-slate-900" />}
               <th className="sticky left-0 bg-slate-50 dark:bg-slate-900 px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-300 min-w-[220px] z-20 text-xs uppercase tracking-wider">
                 Format
               </th>
@@ -640,7 +818,7 @@ export function RateCardClient({
                   key={tier.id}
                   colSpan={2}
                   className={cn(
-                    "px-2 py-3 text-center font-semibold min-w-[130px] text-[11px] border-l-2 border-border",
+                    "px-2 py-3 text-center font-semibold min-w-[130px] text-[11px] border-l-2 border-border relative",
                     tier.currency === "INR"
                       ? "text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/20"
                       : tidx % 2 === 0
@@ -652,11 +830,25 @@ export function RateCardClient({
                   <div className="text-[10px] font-medium opacity-60 mt-0.5">
                     {tier.currency === "INR" ? "₹ INR" : `$ USD · ${tier.multiplier}×`}
                   </div>
+                  {editMode && tiers.length > 1 && (
+                    <button onClick={() => { if (confirm(`Delete "${tier.name}" column?`)) handleDeleteTier(tier.id); }}
+                      className="absolute top-1 right-1 text-red-400 hover:text-red-600 transition-colors" title="Delete column">
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
                 </th>
               ))}
+              {editMode && (
+                <th className="px-2 py-3 border-l-2 border-border w-10">
+                  <button onClick={() => setAddTierOpen(true)} className="text-primary hover:text-primary/80" title="Add column">
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </th>
+              )}
             </tr>
             {/* List / Floor sub-header */}
             <tr className="bg-white dark:bg-slate-950 border-b-2 border-slate-200 dark:border-slate-700">
+              {editMode && <th className="w-8" />}
               <th className="sticky left-0 bg-white dark:bg-slate-950 z-20" />
               <th />
               <th />
@@ -670,6 +862,8 @@ export function RateCardClient({
                   </th>
                 </Fragment>
               ))}
+              {editMode && <th />}
+              {editMode && <th className="w-8" />}
             </tr>
           </thead>
           <tbody>
@@ -690,14 +884,17 @@ export function RateCardClient({
                 item.base_inr,
                 item.floor_percent,
                 tiers,
-                fxRate
+                fxRate,
+                item.price_overrides
               );
-              const maxPrices = isRangeRow ? computeAllTierPrices(item.base_inr_max!, item.floor_percent, tiers, fxRate) : null;
+              const maxPrices = isRangeRow ? computeAllTierPrices(item.base_inr_max!, item.floor_percent, tiers, fxRate, item.price_overrides) : null;
               const stripe = idx % 2 === 1;
 
               return (
-                <tr
+                <SortableRow
                   key={item.id}
+                  id={item.id}
+                  editMode={editMode}
                   className={cn(
                     "border-b border-slate-100 dark:border-slate-800 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/10 transition-colors",
                     stripe && "bg-slate-50/50 dark:bg-slate-900/20"
@@ -718,11 +915,36 @@ export function RateCardClient({
                     )}
                   </td>
 
-                  {/* Length */}
-                  <td className="px-3 py-3 text-center text-slate-500 dark:text-slate-400">
-                    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-medium">
-                      {item.length ?? "—"}
-                    </span>
+                  {/* Length — editable */}
+                  <td
+                    className={cn(
+                      "px-3 py-3 text-center text-slate-500 dark:text-slate-400 group cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-950/20 transition-colors rounded",
+                      editingCell?.itemId === item.id && editingCell.field === "length" && "p-1"
+                    )}
+                    onClick={() => {
+                      if (!(editingCell?.itemId === item.id && editingCell.field === "length")) {
+                        startEdit(item.id, "length");
+                      }
+                    }}
+                  >
+                    {editingCell?.itemId === item.id && editingCell.field === "length" ? (
+                      <Input
+                        ref={inputRef}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
+                          if (e.key === "Escape") cancelEdit();
+                        }}
+                        onBlur={commitEdit}
+                        className="h-8 text-xs text-center border-2 border-emerald-400 rounded-md focus:ring-2 focus:ring-emerald-200"
+                      />
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 justify-center px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-medium">
+                        {item.length ?? "—"}
+                        <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-40 transition-opacity" />
+                      </span>
+                    )}
                   </td>
 
                   {/* SLA — editable */}
@@ -833,11 +1055,11 @@ export function RateCardClient({
                               className="h-8 text-xs text-right border-2 border-emerald-400 rounded-md w-28 focus:ring-2 focus:ring-emerald-200"
                             />
                           ) : isINR ? (
-                            <span className={cn("inline-flex items-center gap-1 justify-end", editMode && "border-b border-dashed border-primary/30 pb-0.5")}>
+                            <span className="inline-flex items-center gap-1 justify-end">
                               {formatCurrency(tp.list, tp.symbol)}
-                              <Pencil className={cn("h-3 w-3 transition-opacity shrink-0", editMode ? "opacity-40" : "opacity-0 group-hover:opacity-40")} />
+                              <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-40 transition-opacity shrink-0" />
                             </span>
-                          ) : editMode && editingCell?.itemId === item.id && editingCell.tierKey === tp.tier_key && !editingCell.isFloor ? (
+                          ) : editingCell?.itemId === item.id && editingCell.field === "price_overrides" && editingCell.tierKey === tp.tier_key && !editingCell.isFloor ? (
                             <Input
                               ref={inputRef}
                               type="number"
@@ -852,8 +1074,8 @@ export function RateCardClient({
                             />
                           ) : (
                             <span
-                              className={cn("text-[12px]", editMode && "border-b border-dashed border-primary/20 pb-0.5 cursor-pointer")}
-                              onClick={editMode ? () => startPriceEdit(item.id, tp.list, tp.tier_key, tp.currency === "INR" ? 1 : tiers.find(t => t.tier_key === tp.tier_key)!.multiplier, false) : undefined}
+                              className="text-[12px] cursor-pointer"
+                              onClick={() => startTierOverrideEdit(item.id, tp.tier_key, tp.list, false)}
                             >
                               {formatCurrency(tp.list, tp.symbol)}
                             </span>
@@ -861,16 +1083,13 @@ export function RateCardClient({
                         </td>
                         {/* Floor price */}
                         <td
-                          className={cn(
-                            "px-2 py-3 text-right text-slate-400 dark:text-slate-500 tabular-nums text-[12px] bg-muted/20",
-                            editMode && "cursor-pointer"
-                          )}
-                          onClick={editMode && !(editingCell?.itemId === item.id && editingCell.tierKey === tp.tier_key && editingCell.isFloor)
-                            ? () => startPriceEdit(item.id, tp.floor, tp.tier_key, tp.currency === "INR" ? 1 : tiers.find(t => t.tier_key === tp.tier_key)!.multiplier, true)
+                          className="px-2 py-3 text-right text-slate-400 dark:text-slate-500 tabular-nums text-[12px] bg-muted/20 cursor-pointer"
+                          onClick={!(editingCell?.itemId === item.id && editingCell.field === "price_overrides" && editingCell.tierKey === tp.tier_key && editingCell.isFloor)
+                            ? () => startTierOverrideEdit(item.id, tp.tier_key, tp.floor, true)
                             : undefined
                           }
                         >
-                          {editMode && editingCell?.itemId === item.id && editingCell.tierKey === tp.tier_key && editingCell.isFloor ? (
+                          {editingCell?.itemId === item.id && editingCell.field === "price_overrides" && editingCell.tierKey === tp.tier_key && editingCell.isFloor ? (
                             <Input
                               ref={inputRef}
                               type="number"
@@ -884,20 +1103,36 @@ export function RateCardClient({
                               className="h-8 text-xs text-right border-2 border-primary rounded-md w-24 focus:ring-2 focus:ring-primary/30"
                             />
                           ) : (
-                            <span className={cn(editMode && "border-b border-dashed border-primary/15 pb-0.5")}>
-                              {formatCurrency(tp.floor, tp.symbol)}
-                            </span>
+                            <span>{formatCurrency(tp.floor, tp.symbol)}</span>
                           )}
                         </td>
                       </Fragment>
                     );
                   })}
-                </tr>
+                  {editMode && <td />}
+                  {editMode && (
+                    <td className="px-1 py-3 text-center w-8">
+                      <button onClick={() => { if (confirm(`Delete "${item.name}"?`)) handleDeleteRow(item.id); }}
+                        className="text-red-300 hover:text-red-500 transition-colors" title="Delete row">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
+                  )}
+                </SortableRow>
               );
             })}
           </tbody>
         </table>
+        {editMode && (
+          <div className="border-t px-4 py-2">
+            <button onClick={() => setAddRowOpen(true)} className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 py-1">
+              <Plus className="h-3.5 w-3.5" /> Add Row
+            </button>
+          </div>
+        )}
       </div>
+      </SortableContext>
+      </DndContext>
 
       {/* ── Summary bar ──────────────────────────────────────────────────── */}
       {sectionItems.length > 0 && (
@@ -930,7 +1165,7 @@ export function RateCardClient({
                 <>
                   Changing{" "}
                   <strong className="text-foreground">
-                    {reasonDialog.field === "base_inr" ? "Base INR" : "SLA"}
+                    {reasonDialog.field === "base_inr" ? "Base INR" : reasonDialog.field === "price_overrides" ? "Tier Price" : reasonDialog.field.toUpperCase()}
                   </strong>{" "}
                   from{" "}
                   <span className="line-through text-red-500">
@@ -942,6 +1177,8 @@ export function RateCardClient({
                   <span className="text-emerald-600 font-semibold">
                     {reasonDialog.field === "base_inr"
                       ? formatINR(Number(reasonDialog.newValue))
+                      : reasonDialog.field === "price_overrides"
+                      ? (() => { try { const ov = JSON.parse(reasonDialog.newValue); const keys = Object.keys(ov); const lastKey = keys[keys.length - 1]; const vals = ov[lastKey]; return String(vals?.list ?? vals?.floor ?? ""); } catch { return reasonDialog.newValue; } })()
                       : reasonDialog.newValue}
                   </span>
                 </>
@@ -1010,6 +1247,178 @@ export function RateCardClient({
               onClick={handleRevert}
             >
               {reverting ? "Reverting..." : "Revert"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add Row dialog ─────────────────────────────────────────────── */}
+      <Dialog open={addRowOpen} onOpenChange={setAddRowOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Row — {SECTION_LABELS[activeSection]}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-xs font-semibold">Format Name *</Label>
+              <Input value={newRowName} onChange={(e) => setNewRowName(e.target.value)} placeholder="e.g. Marketing image (single)" className="h-8 text-sm" autoFocus />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs">Length</Label>
+                <Input value={newRowLength} onChange={(e) => setNewRowLength(e.target.value)} placeholder="e.g. 15s" className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-xs">SLA</Label>
+                <Input value={newRowSla} onChange={(e) => setNewRowSla(e.target.value)} placeholder="e.g. 24 hrs" className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-xs">Floor %</Label>
+                <Input type="text" inputMode="decimal" value={newRowFloor} onChange={(e) => { if (/^\d*\.?\d*$/.test(e.target.value)) setNewRowFloor(e.target.value); }} placeholder="75" className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="border-t pt-3">
+              <Label className="text-xs font-semibold mb-2 block">Tier Pricing</Label>
+              <div className="space-y-2">
+                {tiers.map((tier) => (
+                  <div key={tier.id} className="grid grid-cols-[1fr_100px_100px] gap-2 items-center">
+                    <span className="text-xs font-medium truncate">{tier.name}</span>
+                    <div>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder={tier.currency === "INR" ? "Base INR" : "List"}
+                        className="h-7 text-xs"
+                        value={tier.currency === "INR" ? newRowBaseInr : (newRowTierPrices[tier.tier_key]?.list ?? "")}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!/^\d*\.?\d*$/.test(v)) return;
+                          if (tier.currency === "INR") {
+                            setNewRowBaseInr(v);
+                          } else {
+                            setNewRowTierPrices((prev) => ({
+                              ...prev,
+                              [tier.tier_key]: { ...prev[tier.tier_key], list: v },
+                            }));
+                          }
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="Floor"
+                        className="h-7 text-xs"
+                        value={newRowTierPrices[tier.tier_key]?.floor ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!/^\d*\.?\d*$/.test(v)) return;
+                          setNewRowTierPrices((prev) => ({
+                            ...prev,
+                            [tier.tier_key]: { ...prev[tier.tier_key], floor: v },
+                          }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-2">Leave blank to auto-calculate from Base INR × multiplier.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" size="sm" onClick={() => setAddRowOpen(false)}>Cancel</Button>
+            <Button size="sm" disabled={addingRow || !newRowName.trim() || !newRowBaseInr} onClick={handleAddRow}>
+              {addingRow ? "Adding..." : "Add Row"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add Tier dialog ────────────────────────────────────────────── */}
+      <Dialog open={addTierOpen} onOpenChange={setAddTierOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Tier Column</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-xs font-semibold">Tier Name *</Label>
+              <Input value={newTierName} onChange={(e) => setNewTierName(e.target.value)} placeholder="e.g. LATAM T1 · Brazil" className="h-8 text-sm" autoFocus />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Region</Label>
+                <Input value={newTierRegion} onChange={(e) => setNewTierRegion(e.target.value)} placeholder="e.g. Latin America" className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-xs">Tier Level</Label>
+                <Input value={newTierLevel} onChange={(e) => setNewTierLevel(e.target.value)} placeholder="e.g. T1" className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs">Multiplier *</Label>
+                <Input type="text" inputMode="decimal" value={newTierMultiplier} onChange={(e) => { if (/^\d*\.?\d*$/.test(e.target.value)) setNewTierMultiplier(e.target.value); }} className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-xs">Currency</Label>
+                <Input value={newTierCurrency} onChange={(e) => setNewTierCurrency(e.target.value)} placeholder="USD" className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-xs">Symbol</Label>
+                <Input value={newTierSymbol} onChange={(e) => setNewTierSymbol(e.target.value)} placeholder="$" className="h-8 text-sm" />
+              </div>
+            </div>
+            {items.length > 0 && (
+              <div className="border-t pt-3">
+                <Label className="text-xs font-semibold mb-2 block">Row Pricing</Label>
+                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                  {items.filter((i) => i.section === activeSection).sort((a, b) => a.sort_order - b.sort_order).map((item) => (
+                    <div key={item.id} className="grid grid-cols-[1fr_100px_100px] gap-2 items-center">
+                      <span className="text-xs font-medium truncate" title={item.name}>{item.name}</span>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="List"
+                        className="h-7 text-xs"
+                        value={newTierItemPrices[item.id]?.list ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!/^\d*\.?\d*$/.test(v)) return;
+                          setNewTierItemPrices((prev) => ({
+                            ...prev,
+                            [item.id]: { ...prev[item.id], list: v },
+                          }));
+                        }}
+                      />
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="Floor"
+                        className="h-7 text-xs"
+                        value={newTierItemPrices[item.id]?.floor ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!/^\d*\.?\d*$/.test(v)) return;
+                          setNewTierItemPrices((prev) => ({
+                            ...prev,
+                            [item.id]: { ...prev[item.id], floor: v },
+                          }));
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-2">Leave blank to auto-calculate from Base INR × multiplier.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" size="sm" onClick={() => setAddTierOpen(false)}>Cancel</Button>
+            <Button size="sm" disabled={addingTier || !newTierName.trim()} onClick={handleAddTier}>
+              {addingTier ? "Adding..." : "Add Column"}
             </Button>
           </DialogFooter>
         </DialogContent>

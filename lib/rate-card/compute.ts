@@ -24,13 +24,15 @@ export function computeAllTierPrices(
   baseInr: number,
   floorPercent: number,
   tiers: RateCardTier[],
-  fxRate: number
+  fxRate: number,
+  overrides?: Record<string, { list?: number; floor?: number }> | null
 ): TierPrice[] {
   return tiers.map((tier) => {
-    const list = computeTierPrice(baseInr, tier.multiplier, fxRate);
-    const floor = tier.multiplier === 1.0
+    const ov = overrides?.[tier.tier_key];
+    const list = ov?.list ?? computeTierPrice(baseInr, tier.multiplier, fxRate);
+    const floor = ov?.floor ?? (tier.multiplier === 1.0
       ? computeFloor(baseInr, floorPercent)
-      : roundPrice((baseInr * tier.multiplier * (floorPercent / 100)) / fxRate);
+      : roundPrice((baseInr * tier.multiplier * (floorPercent / 100)) / fxRate));
     return {
       tier_key: tier.tier_key,
       tier_name: tier.name,
