@@ -179,7 +179,7 @@ export async function getClientTasks(input: GetClientTasksInput) {
 
   const { data: tasks, error } = await supabase
     .from("tasks")
-    .select("id, title, priority, due_date, is_completed, column_id, project_id, project_columns(name), projects(name)")
+    .select("id, title, priority, due_date, is_completed, column_id, project_id, manager_id, project_columns(name), projects(name)")
     .eq("client_id", clientId)
     .order("created_at", { ascending: false })
     .limit(input.limit);
@@ -187,6 +187,10 @@ export async function getClientTasks(input: GetClientTasksInput) {
 
   const taskIds = (tasks || []).map(t => t.id);
   const assigneeMap: Record<string, string[]> = {};
+  let memberNameMap = new Map<string, string>();
+
+  const managerIds = Array.from(new Set((tasks || []).map(t => t.manager_id).filter(Boolean))) as string[];
+  const allUserIds = new Set<string>(managerIds);
 
   if (taskIds.length > 0) {
     const { data: assignees } = await supabase
@@ -194,18 +198,20 @@ export async function getClientTasks(input: GetClientTasksInput) {
       .select("task_id, user_id")
       .in("task_id", taskIds);
 
-    const userIds = [...new Set((assignees || []).map(a => a.user_id))];
-    if (userIds.length > 0) {
+    for (const a of assignees || []) allUserIds.add(a.user_id);
+
+    if (allUserIds.size > 0) {
       const { data: members } = await supabase
         .from("members")
         .select("id, full_name")
-        .in("id", userIds);
-      const nameMap = new Map((members || []).map(m => [m.id, m.full_name]));
-      for (const a of assignees || []) {
-        if (!assigneeMap[a.task_id]) assigneeMap[a.task_id] = [];
-        const name = nameMap.get(a.user_id);
-        if (name) assigneeMap[a.task_id].push(name);
-      }
+        .in("id", Array.from(allUserIds));
+      for (const m of members || []) memberNameMap.set(m.id, m.full_name);
+    }
+
+    for (const a of assignees || []) {
+      if (!assigneeMap[a.task_id]) assigneeMap[a.task_id] = [];
+      const name = memberNameMap.get(a.user_id);
+      if (name) assigneeMap[a.task_id].push(name);
     }
   }
 
@@ -218,6 +224,7 @@ export async function getClientTasks(input: GetClientTasksInput) {
     column: (t.project_columns as unknown as { name: string })?.name || "Unknown",
     project: (t.projects as unknown as { name: string })?.name || "Unknown",
     assignees: assigneeMap[t.id] || [],
+    manager: t.manager_id ? memberNameMap.get(t.manager_id) || null : null,
   }));
 
   const completed = formatted.filter(t => t.is_completed).length;
