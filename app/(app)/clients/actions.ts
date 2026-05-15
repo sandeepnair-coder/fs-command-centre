@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentMember } from "@/lib/auth/getCurrentMember";
+import { audit } from "@/lib/audit";
 import type {
   Client,
   ClientContact,
@@ -120,7 +121,7 @@ export async function createClientFull(opts: {
 
   // Log audit event
   const member = await getCurrentMember();
-  await logAudit("client_created", "client", data.id, member?.id || null);
+  await audit("client_created", "client", data.id, "user", member?.id || null);
 
   return data as Client;
 }
@@ -271,7 +272,7 @@ export async function acceptClientFact(factId: string) {
     .single();
   if (error) throw error;
 
-  await logAudit("fact_accepted", "client_fact", factId, member?.id || null);
+  await audit("fact_accepted", "client_fact", factId, "user", member?.id || null);
   return data as ClientFact;
 }
 
@@ -280,7 +281,7 @@ export async function rejectClientFact(factId: string) {
   const member = await getCurrentMember();
   const { error } = await supabase.from("client_facts").delete().eq("id", factId);
   if (error) throw error;
-  await logAudit("fact_rejected", "client_fact", factId, member?.id || null);
+  await audit("fact_rejected", "client_fact", factId, "user", member?.id || null);
 }
 
 // ─── Brand Assets ───────────────────────────────────────────────────────────
@@ -483,29 +484,9 @@ export async function batchCreateClientExtras(clientId: string, extras: {
     }
   }
 
-  await logAudit("client_advanced_intake", "client", clientId, member?.id || null, {
+  await audit("client_advanced_intake", "client", clientId, "user", member?.id || null, {
     contacts: extras.contacts?.length || 0,
     facts: extras.facts?.length || 0,
     assets: extras.assets?.length || 0,
-  });
-}
-
-// ─── Audit helper ───────────────────────────────────────────────────────────
-
-async function logAudit(
-  eventType: string,
-  entityType: string,
-  entityId: string,
-  actorId: string | null,
-  metadata?: Record<string, unknown>
-) {
-  const supabase = await createClient();
-  await supabase.from("audit_log_events").insert({
-    actor_type: "user",
-    actor_id: actorId,
-    event_type: eventType,
-    entity_type: entityType,
-    entity_id: entityId,
-    metadata_json: metadata ? JSON.stringify(metadata) : null,
   });
 }

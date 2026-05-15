@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentMember } from "@/lib/auth/getCurrentMember";
+import { audit } from "@/lib/audit";
 import type {
   Conversation,
   CommsMessage,
@@ -88,7 +89,7 @@ export async function updateConversationStatus(conversationId: string, status: C
   const { error } = await supabase.from("conversations").update(updates).eq("id", conversationId);
   if (error) throw error;
   const member = await getCurrentMember();
-  await auditLog("conversation_status_changed", "conversation", conversationId, member?.id || null, { status });
+  await audit("conversation_status_changed", "conversation", conversationId, "user", member?.id || null, { status });
 }
 
 export async function updateConversationPriority(conversationId: string, priority: ConversationPriority) {
@@ -104,7 +105,7 @@ export async function linkConversationToClient(conversationId: string, clientId:
   // Also update messages
   await supabase.from("comms_messages").update({ client_id: clientId }).eq("conversation_id", conversationId);
   const member = await getCurrentMember();
-  await auditLog("conversation_linked_to_client", "conversation", conversationId, member?.id || null, { client_id: clientId });
+  await audit("conversation_linked_to_client", "conversation", conversationId, "user", member?.id || null, { client_id: clientId });
 }
 
 export async function linkConversationToProject(conversationId: string, projectId: string | null) {
@@ -330,13 +331,3 @@ export async function sendWhatsAppReply(conversationId: string, message: string)
   return { ok: true };
 }
 
-// ─── Audit Helper ───────────────────────────────────────────────────────────
-
-async function auditLog(eventType: string, entityType: string, entityId: string, actorId: string | null, metadata?: Record<string, unknown>) {
-  const supabase = await createClient();
-  await supabase.from("audit_log_events").insert({
-    actor_type: "user", actor_id: actorId, event_type: eventType,
-    entity_type: entityType, entity_id: entityId,
-    metadata_json: metadata ? JSON.stringify(metadata) : null,
-  });
-}
