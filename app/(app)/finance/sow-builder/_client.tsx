@@ -373,7 +373,7 @@ export function SoWBuilderClient({ version, tiers, items, editingSow, onSaved }:
 
   // ---- Render ----
   return (
-    <div className="flex-1 flex overflow-hidden relative max-w-[1400px] mx-auto w-full gap-5">
+    <div className="flex-1 flex overflow-hidden relative max-w-[1400px] mx-auto w-full gap-5 h-full min-h-0">
       {/* ========== LEFT: CONFIG ========== */}
       <div className="flex-1 overflow-y-auto scrollbar-hide">
         <div className="p-5 pl-0 space-y-4">

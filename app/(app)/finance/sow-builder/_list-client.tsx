@@ -14,7 +14,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ClientAvatar } from "@/components/shared/client-avatar";
-import { Plus, Search, X, FileText, ArrowLeft, Pencil, Copy, Printer, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Lightbulb } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, Search, X, FileText, ArrowLeft, Pencil, Copy, Printer, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Lightbulb, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { RateCardVersion, RateCardTier, RateCardItem } from "@/lib/types/rate-card";
@@ -326,64 +333,80 @@ export function SoWListClient({ initialSows, version, tiers, items }: Props) {
                   {new Date(sow.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                 </TableCell>
                 <TableCell className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center gap-1 justify-end">
-                    {sow.status === "draft" && (
-                      <Button variant="ghost" size="sm" className="h-7 text-xs text-primary gap-1" onClick={() => setView("builder")}>
-                        <Pencil className="h-3 w-3" />
-                        Edit
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-7 w-7">
+                        <MoreHorizontal className="h-4 w-4" />
                       </Button>
-                    )}
-                    <Button variant="ghost" size="sm" className="h-7 text-xs text-foreground/70 hover:text-foreground gap-1" onClick={async () => {
-                      try {
-                        const newRef = await getNextSowRef();
-                        const rowData = draftToRow({ ...sow, sowRef: newRef, status: "draft" });
-                        const created = await createSow(rowData);
-                        setSows((prev) => [rowToDraft(created), ...prev]);
-                        toast.success(`Duplicated as ${newRef}`);
-                      } catch {
-                        toast.error("Failed to duplicate SoW");
-                      }
-                    }}>
-                      <Copy className="h-3 w-3" />
-                      Duplicate
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-7 text-xs text-foreground/70 hover:text-foreground gap-1" onClick={() => {
-                      const printWindow = window.open("", "_blank");
-                      if (!printWindow) { toast.error("Pop-up blocked"); return; }
-                      const services = [sow.gmEnabled ? "Gen Media" : "", sow.mkEnabled ? "Marketing" : ""].filter(Boolean).join(" + ");
-                      printWindow.document.write(`
-                        <html><head><title>${sow.sowRef}</title>
-                        <style>body{font-family:system-ui,sans-serif;padding:40px;color:#1a1a1a}
-                        h1{font-size:24px;margin-bottom:4px}table{width:100%;border-collapse:collapse;margin:16px 0}
-                        td,th{border:1px solid #ddd;padding:8px 12px;text-align:left;font-size:13px}
-                        th{background:#f5f5f5;font-weight:600}.amt{font-size:20px;font-weight:800;color:#059669}
-                        .meta{color:#666;font-size:12px}</style></head><body>
-                        <h1>FYND STUDIO</h1><p class="meta">Statement of Work</p><hr/>
-                        <table><tr><th>Ref</th><td>${sow.sowRef}</td></tr>
-                        <tr><th>Client</th><td>${sow.clientName}</td></tr>
-                        <tr><th>Brand</th><td>${sow.brandName}</td></tr>
-                        <tr><th>Buyer</th><td>${sow.buyerName}</td></tr>
-                        <tr><th>Sales DRI</th><td>${sow.salesDri}</td></tr>
-                        <tr><th>Market / Tier</th><td>${sow.tierName}</td></tr>
-                        <tr><th>Services</th><td>${services}</td></tr>
-                        <tr><th>Status</th><td>${sow.status.charAt(0).toUpperCase() + sow.status.slice(1)}</td></tr>
-                        <tr><th>Created</th><td>${new Date(sow.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</td></tr></table>
-                        <h2>Commercials</h2>
-                        <table><tr><th>Net Monthly</th><td class="amt">${fmtPrice(sow.netMonthly, sow.symbol)}/mo</td></tr>
-                        <tr><th>Annual Value</th><td class="amt">${fmtPrice(sow.annualValue, sow.symbol)}</td></tr>
-                        <tr><th>Discount</th><td>${sow.discount}%</td></tr>
-                        <tr><th>Upfront</th><td>${sow.upfront}%</td></tr>
-                        <tr><th>Term</th><td>${sow.months} months</td></tr>
-                        <tr><th>Currency</th><td>${sow.currency} (${sow.symbol})</td></tr></table>
-                        <p class="meta" style="margin-top:32px">Generated by Fynd Studio · ${new Date().toLocaleDateString()}</p>
-                        </body></html>`);
-                      printWindow.document.close();
-                      setTimeout(() => printWindow.print(), 300);
-                    }}>
-                      <Printer className="h-3 w-3" />
-                      PDF
-                    </Button>
-                  </div>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-36">
+                      {sow.status === "draft" && (
+                        <DropdownMenuItem onClick={() => setView("builder")} className="gap-2 text-xs">
+                          <Pencil className="h-3.5 w-3.5" /> Edit
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem className="gap-2 text-xs" onClick={async () => {
+                        try {
+                          const newRef = await getNextSowRef();
+                          const rowData = draftToRow({ ...sow, sowRef: newRef, status: "draft" });
+                          const created = await createSow(rowData);
+                          setSows((prev) => [rowToDraft(created), ...prev]);
+                          toast.success(`Duplicated as ${newRef}`);
+                        } catch {
+                          toast.error("Failed to duplicate SoW");
+                        }
+                      }}>
+                        <Copy className="h-3.5 w-3.5" /> Duplicate
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2 text-xs" onClick={() => {
+                        const printWindow = window.open("", "_blank");
+                        if (!printWindow) { toast.error("Pop-up blocked"); return; }
+                        const services = [sow.gmEnabled ? "Gen Media" : "", sow.mkEnabled ? "Marketing" : ""].filter(Boolean).join(" + ");
+                        printWindow.document.write(`
+                          <html><head><title>${sow.sowRef}</title>
+                          <style>body{font-family:system-ui,sans-serif;padding:40px;color:#1a1a1a}
+                          h1{font-size:24px;margin-bottom:4px}table{width:100%;border-collapse:collapse;margin:16px 0}
+                          td,th{border:1px solid #ddd;padding:8px 12px;text-align:left;font-size:13px}
+                          th{background:#f5f5f5;font-weight:600}.amt{font-size:20px;font-weight:800;color:#059669}
+                          .meta{color:#666;font-size:12px}</style></head><body>
+                          <h1>FYND STUDIO</h1><p class="meta">Statement of Work</p><hr/>
+                          <table><tr><th>Ref</th><td>${sow.sowRef}</td></tr>
+                          <tr><th>Client</th><td>${sow.clientName}</td></tr>
+                          <tr><th>Brand</th><td>${sow.brandName}</td></tr>
+                          <tr><th>Buyer</th><td>${sow.buyerName}</td></tr>
+                          <tr><th>Sales DRI</th><td>${sow.salesDri}</td></tr>
+                          <tr><th>Market / Tier</th><td>${sow.tierName}</td></tr>
+                          <tr><th>Services</th><td>${services}</td></tr>
+                          <tr><th>Status</th><td>${sow.status.charAt(0).toUpperCase() + sow.status.slice(1)}</td></tr>
+                          <tr><th>Created</th><td>${new Date(sow.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</td></tr></table>
+                          <h2>Commercials</h2>
+                          <table><tr><th>Net Monthly</th><td class="amt">${fmtPrice(sow.netMonthly, sow.symbol)}/mo</td></tr>
+                          <tr><th>Annual Value</th><td class="amt">${fmtPrice(sow.annualValue, sow.symbol)}</td></tr>
+                          <tr><th>Discount</th><td>${sow.discount}%</td></tr>
+                          <tr><th>Upfront</th><td>${sow.upfront}%</td></tr>
+                          <tr><th>Term</th><td>${sow.months} months</td></tr>
+                          <tr><th>Currency</th><td>${sow.currency} (${sow.symbol})</td></tr></table>
+                          <p class="meta" style="margin-top:32px">Generated by Fynd Studio · ${new Date().toLocaleDateString()}</p>
+                          </body></html>`);
+                        printWindow.document.close();
+                        setTimeout(() => printWindow.print(), 300);
+                      }}>
+                        <Printer className="h-3.5 w-3.5" /> Print
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="gap-2 text-xs text-destructive focus:text-destructive" onClick={async () => {
+                        try {
+                          await deleteSow(sow.id);
+                          setSows((prev) => prev.filter((s) => s.id !== sow.id));
+                          toast.success("SoW deleted");
+                        } catch {
+                          toast.error("Failed to delete SoW");
+                        }
+                      }}>
+                        <Trash2 className="h-3.5 w-3.5" /> Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
