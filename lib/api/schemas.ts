@@ -131,6 +131,7 @@ export const AddCommentSchema = z.object({
   ...taskOrMsg,
   body: z.string().min(1).max(5000),
   agent_run_id: z.string().max(200).optional(),
+  requested_by_slack_user_id: z.string().max(50).optional(),
 }).refine(d => d.task_id || d.task_title || d.source_message_id, { message: "task_id, task_title, or source_message_id required" });
 export type AddCommentInput = z.infer<typeof AddCommentSchema>;
 
@@ -155,6 +156,7 @@ export const AddLinkSchema = z.object({
   url: z.string().url().max(2000),
   label: z.string().max(200).optional(),
   agent_run_id: z.string().max(200).optional(),
+  requested_by_slack_user_id: z.string().max(50).optional(),
 }).refine(d => d.task_id || d.task_title || d.source_message_id, { message: "task_id, task_title, or source_message_id required" });
 export type AddLinkInput = z.infer<typeof AddLinkSchema>;
 
@@ -210,6 +212,7 @@ export const AddClientContactSchema = z.object({
   preferred_channel: z.enum(["email", "slack", "whatsapp"]).optional(),
   notes: z.string().max(2000).optional(),
   agent_run_id: z.string().max(200).optional(),
+  requested_by_slack_user_id: z.string().max(50).optional(),
 });
 export type AddClientContactInput = z.infer<typeof AddClientContactSchema>;
 
@@ -221,6 +224,7 @@ export const AddClientFactSchema = z.object({
     confidence: z.enum(["high", "medium", "low"]).default("medium"),
   })).min(1).max(30),
   agent_run_id: z.string().max(200).optional(),
+  requested_by_slack_user_id: z.string().max(50).optional(),
 });
 export type AddClientFactInput = z.infer<typeof AddClientFactSchema>;
 

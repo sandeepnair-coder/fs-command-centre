@@ -10,6 +10,7 @@ export type Member = {
   created_at: string;
   updated_at: string;
   clerk_id?: string | null;
+  slack_user_id?: string | null;
   full_name?: string | null;
   avatar_url?: string | null;
   is_manager?: boolean;
