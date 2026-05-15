@@ -245,6 +245,7 @@ export async function createExpense(expense: {
   payment_method?: PaymentMethod;
   project_id?: string | null;
   description?: string | null;
+  receipt_url?: string | null;
   is_recurring?: boolean;
   recurrence_rule?: string | null;
   status?: ExpenseStatus;
@@ -279,6 +280,23 @@ export async function deleteExpense(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("expenses").delete().eq("id", id);
   if (error) throw error;
+}
+
+export async function uploadExpenseReceipt(formData: FormData): Promise<string> {
+  const supabase = await createClient();
+  const file = formData.get("file") as File;
+  if (!file) throw new Error("No file provided");
+
+  const ext = file.name.split(".").pop();
+  const path = `receipts/${crypto.randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("expense-receipts")
+    .upload(path, file);
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage.from("expense-receipts").getPublicUrl(path);
+  return data.publicUrl;
 }
 
 // ─── Invoices ───────────────────────────────────────────────────────────────
