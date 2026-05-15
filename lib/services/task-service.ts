@@ -219,7 +219,9 @@ export async function deleteTaskByAgent(input: DeleteTaskInput) {
 export async function addCommentByAgent(input: AddCommentInput) {
   const supabase = await createClient();
   const taskId = await resolveTaskId(input);
-  const { data, error } = await supabase.from("task_comments").insert({ task_id: taskId, body: `[OpenClaw] ${input.body}`, author_id: null }).select("id, body, created_at").single();
+  const { data: adminMember } = await supabase.from("members").select("id").in("role", ["admin", "owner"]).limit(1).single();
+  const authorId = adminMember?.id || null;
+  const { data, error } = await supabase.from("task_comments").insert({ task_id: taskId, body: `[Astra] ${input.body}`, author_id: authorId }).select("id, body, created_at").single();
   if (error) throw error;
   await audit("comment_added_by_agent", "task", taskId, input.agent_run_id);
   return { comment: data, message: "Comment added" };
