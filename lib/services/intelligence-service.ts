@@ -174,16 +174,33 @@ export async function getTasksAdvanced(input: {
     if (data?.[0]) managerUserId = data[0].id;
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+
   let query = supabase.from("tasks")
     .select("id, title, priority, due_date, is_completed, column_id, project_id, client_id, manager_id, created_at, project_columns(name), projects(name), clients(name)")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .order("created_at", { ascending: false });
 
   if (clientId) query = query.eq("client_id", clientId);
   if (projectId) query = query.eq("project_id", projectId);
   if (managerUserId) query = query.eq("manager_id", managerUserId);
   if (input.priority) query = query.eq("priority", input.priority);
   if (input.search) query = query.ilike("title", `%${input.search}%`);
+
+  if (input.overdue_only) {
+    query = query.lt("due_date", today).eq("is_completed", false);
+  }
+  if (input.due_this_week) {
+    const weekEnd = new Date();
+    weekEnd.setDate(weekEnd.getDate() + (7 - weekEnd.getDay()));
+    query = query.gte("due_date", today).lte("due_date", weekEnd.toISOString().slice(0, 10)).eq("is_completed", false);
+  }
+  if (input.status_filter === "completed") {
+    query = query.eq("is_completed", true);
+  } else if (input.status_filter === "pending") {
+    query = query.eq("is_completed", false);
+  }
+
+  query = query.limit(limit);
 
   const { data: tasks, error } = await query;
   if (error) throw error;
@@ -200,23 +217,9 @@ export async function getTasksAdvanced(input: {
     manager_id: t.manager_id,
   }));
 
-  const today = new Date().toISOString().slice(0, 10);
   const doneColumns = ["approved / done", "done", "completed", "closed"];
 
-  if (input.overdue_only) {
-    filtered = filtered.filter(t => t.due_date && t.due_date < today && !t.is_completed && !doneColumns.includes(t.column.toLowerCase()));
-  }
-  if (input.due_this_week) {
-    const weekEnd = new Date();
-    weekEnd.setDate(weekEnd.getDate() + (7 - weekEnd.getDay()));
-    const weekEndStr = weekEnd.toISOString().slice(0, 10);
-    filtered = filtered.filter(t => t.due_date && t.due_date >= today && t.due_date <= weekEndStr && !t.is_completed);
-  }
-  if (input.status_filter === "pending") {
-    filtered = filtered.filter(t => !t.is_completed && !doneColumns.includes(t.column.toLowerCase()));
-  } else if (input.status_filter === "completed") {
-    filtered = filtered.filter(t => t.is_completed || doneColumns.includes(t.column.toLowerCase()));
-  } else if (input.status_filter === "in_progress") {
+  if (input.status_filter === "in_progress") {
     filtered = filtered.filter(t => t.column.toLowerCase().includes("progress"));
   } else if (input.status_filter === "review") {
     filtered = filtered.filter(t => t.column.toLowerCase().includes("review"));
