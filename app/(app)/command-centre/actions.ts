@@ -579,21 +579,15 @@ async function buildContextSnapshot(): Promise<string> {
   return lines.join("\n");
 }
 
-// ─── Ask OpenClaw ───────────────────────────────────────────────────────────
+// ─── Ask Tessa (Anthropic via Vertex AI) ────────────────────────────────────
 
 export async function askOpenClaw(question: string): Promise<string> {
   const member = await getCurrentMember();
   if (!member) throw new Error("Authentication required");
 
-  const wsUrl = process.env.OPENCLAW_API_URL;
-  const token = process.env.OPENCLAW_API_TOKEN;
-  if (!wsUrl || !token) throw new Error("OpenClaw not configured");
-
-  // Build live data context from the database
   const context = await buildContextSnapshot();
 
-  const enrichedMessage = `[INSTRUCTIONS]
-You are Tessa, the AI assistant inside Fynd Studio Command Centre. You help managers track projects, clients, and team workload.
+  const systemPrompt = `You are Tessa, the AI assistant inside Fynd Studio Command Centre. You help managers track projects, clients, and team workload.
 
 Formatting rules (IMPORTANT — follow strictly):
 - Be conversational and warm — talk like a smart colleague, not a database
@@ -605,34 +599,38 @@ Formatting rules (IMPORTANT — follow strictly):
 - Never dump raw data — summarise and highlight what matters
 
 [LIVE FYND STUDIO DATA]
-${context}
+${context}`;
 
-[USER QUESTION]
-${question}`;
+  const { GoogleAuth } = await import("google-auth-library");
 
-  // Use the REST /tessa/chat endpoint
-  const baseUrl = wsUrl.replace("wss://", "https://").replace("ws://", "http://");
-  const sessionId = `tessa-web-${member.id}`;
+  const credsJson = process.env.GOOGLE_CREDENTIALS;
+  const auth = credsJson
+    ? new GoogleAuth({ credentials: JSON.parse(credsJson), scopes: ["https://www.googleapis.com/auth/cloud-platform"] })
+    : new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
 
-  const res = await fetch(`${baseUrl}/tessa/chat`, {
+  const client = await auth.getClient();
+
+  const projectId = process.env.VERTEX_AI_PROJECT || "fynd-jio-impetus-non-prod";
+  const location = "us-east5";
+  const model = "claude-sonnet-4@20250514";
+
+  const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/anthropic/models/${model}:rawPredict`;
+
+  const response = await client.request({
+    url,
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+    data: {
+      anthropic_version: "vertex-2023-10-16",
+      max_tokens: 2048,
+      temperature: 0.3,
+      system: systemPrompt,
+      messages: [{ role: "user", content: question }],
     },
-    body: JSON.stringify({ message: enrichedMessage, sessionId }),
-    signal: AbortSignal.timeout(120000),
+    headers: { "Content-Type": "application/json" },
   });
 
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "API error");
+  const data = response.data as { content?: Array<{ type: string; text?: string }> };
+  const text = data?.content?.filter((c) => c.type === "text").map((c) => c.text || "").join("") || "";
 
-  // Extract text from OpenClaw agent response
-  const payloads = data.result?.payloads || data.payloads;
-  if (Array.isArray(payloads) && payloads.length > 0) {
-    return payloads.map((p: { text?: string }) => p.text).filter(Boolean).join("\n\n");
-  }
-  if (data.text) return data.text;
-
-  return "No response received. Try rephrasing your question.";
+  return text || "No response received. Try rephrasing your question.";
 }
