@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createSow, updateSow, getNextSowRef, type SowRow } from "./actions";
+import { generateSowPdfHtml } from "@/lib/sow/generate-pdf-html";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1510,27 +1511,29 @@ export function SoWBuilderClient({ version, tiers, items, editingSow, onSaved }:
                       onSaved?.();
                     } catch {}
                   }
-                  const printContent = document.getElementById("sow-print-content");
-                  if (!printContent) return;
+                  const services = [gmEnabled ? gmScopeLabel : "", mkEnabled ? mkScopeLabel : ""].filter(Boolean).join(" + ");
                   const printWindow = window.open("", "_blank");
                   if (!printWindow) { toast.error("Pop-up blocked — allow pop-ups to print"); return; }
-                  printWindow.document.write(`<!DOCTYPE html><html><head><title>${sowRef} — ${clientName}</title>
-                    <style>
-                      body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; color: #1a1a1a; margin: 0; }
-                      table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-                      td, th { border: 1px solid #ddd; padding: 8px 12px; text-align: left; font-size: 13px; }
-                      th { background: #f5f5f5; font-weight: 600; }
-                      h3 { margin-top: 24px; }
-                      .text-primary { color: #059669; }
-                      .text-red-600 { color: #dc2626; }
-                      .text-muted-foreground { color: #666; }
-                      .bg-primary\\/10 { background: #f0fdf4; }
-                      .bg-muted\\/50 { background: #f9fafb; }
-                      ul { padding-left: 20px; }
-                      li { margin-bottom: 4px; }
-                      @page { margin: 15mm; size: A4; }
-                      @media print { body { padding: 0; } }
-                    </style></head><body>${printContent.innerHTML}</body></html>`);
+                  printWindow.document.write(generateSowPdfHtml({
+                    sowRef,
+                    clientName,
+                    brandName,
+                    buyerName,
+                    salesDri,
+                    tierName: selectedTier?.name ?? "",
+                    currency,
+                    symbol,
+                    services,
+                    gmPlanType,
+                    mkPlanType,
+                    discount,
+                    upfront,
+                    months,
+                    netMonthly: Math.round(netMonthly),
+                    annualValue: Math.round(annualValue),
+                    listMonthly: Math.round(listMonthly),
+                    bundleDiscount: Math.round(bundleDiscount),
+                  }));
                   printWindow.document.close();
                   setTimeout(() => printWindow.print(), 400);
                 }}>
