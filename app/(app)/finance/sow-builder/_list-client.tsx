@@ -148,6 +148,7 @@ type Props = {
 
 export function SoWListClient({ initialSows, version, tiers, items }: Props) {
   const [view, setView] = useState<"list" | "builder">("list");
+  const [editingSowId, setEditingSowId] = useState<string | null>(null);
   const [sows, setSows] = useState<SoWDraft[]>(() => initialSows.map(rowToDraft));
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -188,18 +189,23 @@ export function SoWListClient({ initialSows, version, tiers, items }: Props) {
   });
 
   if (view === "builder") {
+    const editingSow = editingSowId ? sows.find(s => s.id === editingSowId) : null;
+    const editingSowRow = editingSow ? draftToRow(editingSow) as SowRow & { id: string; created_at: string; updated_at: string; created_by: string | null } : null;
     return (
       <div className="flex flex-col h-full">
         <div className="flex items-center gap-3 mb-3 shrink-0">
-          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => setView("list")}>
+          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => { setView("list"); setEditingSowId(null); }}>
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to SoW list
           </Button>
+          {editingSow && <span className="text-xs text-muted-foreground">Editing {editingSow.sowRef} · {editingSow.clientName}</span>}
         </div>
         <SoWBuilderClient
+          key={editingSowId ?? "new"}
           version={version}
           tiers={tiers}
           items={items}
+          editingSow={editingSowRow ? { ...editingSowRow, id: editingSow!.id, created_at: editingSow!.createdAt, updated_at: editingSow!.updatedAt, created_by: null } : null}
           onSaved={async () => {
             const fresh = await getSows();
             setSows(fresh.map(rowToDraft));
@@ -220,7 +226,7 @@ export function SoWListClient({ initialSows, version, tiers, items }: Props) {
           <p className="text-sm text-muted-foreground max-w-md mb-6">
             Create your first SoW to generate pricing proposals from your rate card. Each SoW tracks scope, commercials, and payment terms.
           </p>
-          <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5" onClick={() => setView("builder")}>
+          <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5" onClick={() => { setEditingSowId(null); setView("builder"); }}>
             <Plus className="h-4 w-4" />
             Create your first SoW
           </Button>
@@ -262,7 +268,7 @@ export function SoWListClient({ initialSows, version, tiers, items }: Props) {
             )}
           </div>
         </div>
-        <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5" onClick={() => setView("builder")}>
+        <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5" onClick={() => { setEditingSowId(null); setView("builder"); }}>
           <Plus className="h-3.5 w-3.5" />
           New SoW
         </Button>
@@ -299,6 +305,7 @@ export function SoWListClient({ initialSows, version, tiers, items }: Props) {
                 className="cursor-pointer"
                 onClick={() => {
                   if (sow.status === "draft") {
+                    setEditingSowId(sow.id);
                     setView("builder");
                   } else {
                     toast.info(`${sow.sowRef} — ${sow.clientName}`, {
@@ -342,7 +349,7 @@ export function SoWListClient({ initialSows, version, tiers, items }: Props) {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-36">
                       {sow.status === "draft" && (
-                        <DropdownMenuItem onClick={() => setView("builder")} className="gap-2 text-xs">
+                        <DropdownMenuItem onClick={() => { setEditingSowId(sow.id); setView("builder"); }} className="gap-2 text-xs">
                           <Pencil className="h-3.5 w-3.5" /> Edit
                         </DropdownMenuItem>
                       )}
