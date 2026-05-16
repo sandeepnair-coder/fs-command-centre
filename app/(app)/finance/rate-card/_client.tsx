@@ -21,7 +21,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Upload, Download, Clock, Plus, X, Pencil, Search, ChevronRight, Sparkles, Send, Loader2, BookOpen, ShieldCheck, GripVertical, Trash2 } from "lucide-react";
+import { Upload, Download, Clock, Plus, X, Pencil, Search, ChevronRight, Sparkles, Send, Loader2, BookOpen, ShieldCheck, GripVertical, Trash2, MoreHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -34,7 +40,7 @@ import type {
   RateCardSection,
 } from "@/lib/types/rate-card";
 import { SECTION_LABELS } from "@/lib/types/rate-card";
-import { computeAllTierPrices, roundPrice } from "@/lib/rate-card/compute";
+import { computeAllTierPrices, computeTierPrice, roundPrice, evaluateFormula, isFormula, getFormulaTooltip } from "@/lib/rate-card/compute";
 import * as XLSX from "xlsx";
 import { formatINR } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
@@ -43,6 +49,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   updateItemField,
+  updateTierField,
   revertChange,
   getChangeLog,
   getVersionData,
@@ -190,13 +197,91 @@ export function RateCardClient({
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Revert confirmation
-  const [revertDialog, setRevertDialog] = useState<string | null>(null);
-  const [reverting, setReverting] = useState(false);
-
+  // FX rate (must be above navigateCell)
   const storedFx = version?.fx_rate ?? 83;
   const [liveFxRate, setLiveFxRate] = useState<number | null>(null);
   const fxRate = liveFxRate ?? storedFx;
+
+  // Formula bar — selected cell tracking + keyboard navigation
+  const [selectedCell, setSelectedCell] = useState<{ itemId: string; tierKey: string; isFloor: boolean } | null>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  const navigateCell = useCallback((direction: "up" | "down" | "left" | "right" | "tab" | "shiftTab") => {
+    if (!selectedCell) return;
+    const visibleItems = items
+      .filter(i => searchQuery
+        ? i.name.toLowerCase().includes(searchQuery.toLowerCase()) || (i.notes ?? "").toLowerCase().includes(searchQuery.toLowerCase())
+        : i.section === activeSection)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    const rowIdx = visibleItems.findIndex(i => i.id === selectedCell.itemId);
+    if (rowIdx === -1) return;
+
+    const cols: { tierKey: string; isFloor: boolean }[] = [];
+    tiers.forEach(t => {
+      cols.push({ tierKey: t.tier_key, isFloor: false });
+      cols.push({ tierKey: t.tier_key, isFloor: true });
+    });
+    const colIdx = cols.findIndex(c => c.tierKey === selectedCell.tierKey && c.isFloor === selectedCell.isFloor);
+    if (colIdx === -1) return;
+
+    let newRow = rowIdx;
+    let newCol = colIdx;
+
+    if (direction === "up") newRow = Math.max(0, rowIdx - 1);
+    else if (direction === "down") newRow = Math.min(visibleItems.length - 1, rowIdx + 1);
+    else if (direction === "left" || direction === "shiftTab") {
+      newCol = colIdx - 1;
+      if (newCol < 0) { newCol = cols.length - 1; newRow = Math.max(0, rowIdx - 1); }
+    }
+    else if (direction === "right" || direction === "tab") {
+      newCol = colIdx + 1;
+      if (newCol >= cols.length) { newCol = 0; newRow = Math.min(visibleItems.length - 1, rowIdx + 1); }
+    }
+
+    const newItem = visibleItems[newRow];
+    const newColData = cols[newCol];
+    if (newItem && newColData) {
+      setSelectedCell({ itemId: newItem.id, tierKey: newColData.tierKey, isFloor: newColData.isFloor });
+    }
+  }, [selectedCell, items, activeSection, searchQuery, tiers]);
+
+  const keyNavRef = useRef<{ navigate: typeof navigateCell; selectedCell: typeof selectedCell }>({ navigate: navigateCell, selectedCell });
+  keyNavRef.current = { navigate: navigateCell, selectedCell };
+
+  // Tier multiplier inline edit
+  const [editingTierId, setEditingTierId] = useState<string | null>(null);
+  const [editTierMultiplier, setEditTierMultiplier] = useState("");
+  const tierMultiplierRef = useRef<HTMLInputElement>(null);
+
+  const saveTierMultiplier = useCallback(async (tierId: string) => {
+    const newVal = Number(editTierMultiplier);
+    if (!newVal || newVal <= 0 || newVal > 20) {
+      setEditingTierId(null);
+      return;
+    }
+    const tier = tiers.find(t => t.id === tierId);
+    if (!tier || tier.multiplier === newVal) {
+      setEditingTierId(null);
+      return;
+    }
+    try {
+      await updateTierField(tierId, "multiplier", newVal, `Multiplier changed from ${tier.multiplier}× to ${newVal}×`);
+      setTiers(prev => prev.map(t => t.id === tierId ? { ...t, multiplier: newVal } : t));
+      if (version) {
+        const log = await getChangeLog(version.id);
+        setChanges(log);
+      }
+      toast.success(`Multiplier updated to ${newVal}×`);
+      setChangeLogOpen(true);
+    } catch {
+      toast.error("Failed to update multiplier");
+    }
+    setEditingTierId(null);
+  }, [editTierMultiplier, tiers, version]);
+
+  // Revert confirmation
+  const [revertDialog, setRevertDialog] = useState<string | null>(null);
+  const [reverting, setReverting] = useState(false);
 
   useEffect(() => {
     fetch("https://open.er-api.com/v6/latest/USD")
@@ -276,6 +361,39 @@ export function RateCardClient({
     []
   );
 
+  // Keyboard navigation for cells (arrow keys, Tab, Enter)
+  useEffect(() => {
+    if (!editMode || editingCell) return;
+    const handler = (e: KeyboardEvent) => {
+      const { navigate, selectedCell: sc } = keyNavRef.current;
+      if (!sc) return;
+      if (e.key === "ArrowUp") { e.preventDefault(); navigate("up"); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); navigate("down"); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); navigate("left"); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); navigate("right"); }
+      else if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); navigate("tab"); }
+      else if (e.key === "Tab" && e.shiftKey) { e.preventDefault(); navigate("shiftTab"); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        const item = items.find(i => i.id === sc.itemId);
+        const tier = tiers.find(t => t.tier_key === sc.tierKey);
+        if (!item || !tier) return;
+        if (tier.currency === "INR") {
+          startEdit(item.id, "base_inr");
+        } else {
+          const prices = computeAllTierPrices(item.base_inr, item.floor_percent, tiers, fxRate, item.price_overrides);
+          const tp = prices.find(p => p.tier_key === sc.tierKey);
+          if (tp) startTierOverrideEdit(item.id, sc.tierKey, sc.isFloor ? tp.floor : tp.list, sc.isFloor);
+        }
+      }
+      else if (e.key === "Escape") {
+        setSelectedCell(null);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [editMode, editingCell, items, tiers, fxRate, startEdit, startTierOverrideEdit]);
+
   const commitEdit = useCallback(() => {
     if (!editingCell) return;
     const item = items.find((i) => i.id === editingCell.itemId);
@@ -289,16 +407,28 @@ export function RateCardClient({
     let finalOldValue = editingCell.field === "base_inr" ? String(item.base_inr) : String(item[editingCell.field] ?? "");
 
     if (editingCell.field === "price_overrides" && editingCell.tierKey) {
-      const entered = Number(editValue);
-      if (isNaN(entered) || entered <= 0) { setEditingCell(null); return; }
+      let entered: number;
+      const tier = tiers.find(t => t.tier_key === editingCell.tierKey);
+      if (isFormula(editValue)) {
+        const ctx = { base: item.base_inr, mult: tier?.multiplier ?? 1, fx: fxRate, floor: item.floor_percent };
+        const result = evaluateFormula(editValue, ctx);
+        if (result === null) { toast.error("Invalid formula. Use: base, mult, fx, floor"); setEditingCell(null); return; }
+        entered = result;
+      } else {
+        entered = Number(editValue);
+        if (isNaN(entered) || entered <= 0) { setEditingCell(null); return; }
+      }
       const existing = item.price_overrides ?? {};
       const tierOv = existing[editingCell.tierKey] ?? {};
       const priceField = editingCell.isFloor ? "floor" : "list";
       const oldPrice = tierOv[priceField];
-      const tier = tiers.find(t => t.tier_key === editingCell.tierKey);
       const computedPrices = computeAllTierPrices(item.base_inr, item.floor_percent, tiers, fxRate, existing);
       const computedTier = computedPrices.find(p => p.tier_key === editingCell.tierKey);
       const previousValue = oldPrice ?? (editingCell.isFloor ? computedTier?.floor : computedTier?.list) ?? 0;
+      if (entered === previousValue) {
+        setEditingCell(null);
+        return;
+      }
       const updatedOverrides = {
         ...existing,
         [editingCell.tierKey]: {
@@ -572,50 +702,235 @@ export function RateCardClient({
 
   const handleDownload = useCallback(() => {
     const wb = XLSX.utils.book_new();
+    const usdTiers = tiers.filter(t => t.currency !== "INR");
+    const lastCol = 2 + tiers.length * 2; // 0-indexed: Format, Length/Desc, then tier pairs, Notes
 
-    // Header rows
-    const headerRow1 = [`Fynd Studio · Rate Card FY 2026-27 · ${version?.version_label ?? "v7"}`];
-    const headerRow2 = [`India base in INR. USD tiers derived as India × tier multiplier ÷ FX rate (₹${fxRate}) · floor = list × 0.75`];
-    const emptyRow: string[] = [];
-    const assumptionsLabel = ["Assumptions"];
-    const assumptionsRow = ["FX (INR / USD)", ...tiers.filter(t => t.currency !== "INR").map(t => `${t.name.split("·")[0]?.trim()} ${t.multiplier}×`)];
-    const assumptionsValues = [String(fxRate), ...tiers.filter(t => t.currency !== "INR").map(t => `${t.multiplier}×`)];
+    const rcData: (string | number)[][] = [];
+    const merges: XLSX.Range[] = [];
+
+    // Row 0: Title
+    rcData.push([`Fynd Studio · Rate Card FY 2026-27 · ${version?.version_label ?? "v7"}`]);
+    merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: lastCol } });
+
+    // Row 1: Subtitle
+    rcData.push([`India base in INR (v12 §3). USD tiers derived as India × tier multiplier ÷ FX rate (₹${fxRate.toFixed(0)}) · floor = list × 0.75`]);
+    merges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: lastCol } });
+
+    // Row 2: blank
+    rcData.push([]);
+
+    // Row 3: Assumptions label
+    rcData.push(["Assumptions (edit these to refresh all USD prices)"]);
+    merges.push({ s: { r: 3, c: 0 }, e: { r: 3, c: lastCol } });
+
+    // Row 4: Assumption labels
+    rcData.push(["FX (INR / USD)", ...usdTiers.map(t => t.name.split("·")[0]?.trim())]);
+
+    // Row 5: Assumption values
+    rcData.push([fxRate, ...usdTiers.map(t => t.multiplier)]);
+
+    // Row 6: blank
+    rcData.push([]);
+
+    let row = 7;
+
+    const SECTION_NUMS: Record<string, string> = {
+      alacarte: "§1", volume_retainer: "§2", pilot_sprint: "§3",
+      brand_retainer: "§4", per_campaign: "§5", strategic: "§6",
+    };
+    const COL1_LABELS: Record<string, string> = {
+      alacarte: "Format", volume_retainer: "Tier", pilot_sprint: "Construct",
+      brand_retainer: "Tier", per_campaign: "Campaign", strategic: "Service",
+    };
+    const COL2_LABELS: Record<string, string> = {
+      alacarte: "Length", volume_retainer: "Unit", pilot_sprint: "Window",
+      brand_retainer: "Unit", per_campaign: "Description", strategic: "Description",
+    };
 
     SECTION_GROUPS.forEach((group) => {
       group.sections.forEach((sectionKey) => {
-        const sectionLabel = `${group.label} — ${SECTION_LABELS[sectionKey]}`;
         const sectionData = items.filter(i => i.section === sectionKey).sort((a, b) => a.sort_order - b.sort_order);
         if (sectionData.length === 0) return;
 
-        // Column headers
-        const colHeaders = ["Format", "Length", "SLA"];
-        tiers.forEach(t => { colHeaders.push(`${t.name.split("·")[0]?.trim()} List`); colHeaders.push(`${t.name.split("·")[0]?.trim()} Floor`); });
-        colHeaders.push("Notes");
+        const isRange = sectionKey === "per_campaign";
+        const isStrategic = sectionKey === "strategic";
+
+        // Section header (full-width merge)
+        rcData.push([`${SECTION_NUMS[sectionKey]} · ${group.label} — ${SECTION_LABELS[sectionKey]}`]);
+        merges.push({ s: { r: row, c: 0 }, e: { r: row, c: lastCol } });
+        row++;
+
+        // Tier header row
+        const tierRow: string[] = [COL1_LABELS[sectionKey] ?? "Format", COL2_LABELS[sectionKey] ?? "Length"];
+        tiers.forEach(t => { tierRow.push(`${t.name} (${t.currency === "INR" ? "₹" : "USD"})`); tierRow.push(""); });
+        tierRow.push("Notes");
+        rcData.push(tierRow);
+
+        // Merge: col1 spans 2 rows, col2 spans 2 rows, each tier pair merges, Notes spans 2 rows
+        merges.push({ s: { r: row, c: 0 }, e: { r: row + 1, c: 0 } });
+        merges.push({ s: { r: row, c: 1 }, e: { r: row + 1, c: 1 } });
+        for (let t = 0; t < tiers.length; t++) {
+          merges.push({ s: { r: row, c: 2 + t * 2 }, e: { r: row, c: 3 + t * 2 } });
+        }
+        merges.push({ s: { r: row, c: lastCol }, e: { r: row + 1, c: lastCol } });
+        row++;
+
+        // Sub-header row (List / Floor)
+        const subRow: string[] = ["", ""];
+        tiers.forEach(() => { subRow.push("List"); subRow.push("Floor"); });
+        subRow.push("");
+        rcData.push(subRow);
+        row++;
 
         // Data rows
-        const rows: (string | number)[][] = [];
         sectionData.forEach(item => {
-          const row: (string | number)[] = [item.name, item.length ?? "", item.sla ?? ""];
+          const dataRow: (string | number)[] = [item.name, item.length ?? item.description ?? ""];
+
           if (item.item_key === "localisation" || item.base_inr === 0) {
-            tiers.forEach(() => { row.push("+25% of base"); row.push("+18% of base"); });
+            tiers.forEach(() => { dataRow.push("+25% of base"); dataRow.push("+18% of base"); });
+          } else if (isRange && item.base_inr_max) {
+            tiers.forEach(t => {
+              const lo = computeTierPrice(item.base_inr, t.multiplier, fxRate);
+              const hi = computeTierPrice(item.base_inr_max!, t.multiplier, fxRate);
+              const sym = t.currency === "INR" ? "₹" : "$";
+              dataRow.push(`${sym}${lo.toLocaleString("en-US")} - ${sym}${hi.toLocaleString("en-US")}`);
+              dataRow.push("");
+            });
+          } else if (isStrategic) {
+            tiers.forEach(t => {
+              dataRow.push(computeTierPrice(item.base_inr, t.multiplier, fxRate));
+              dataRow.push("");
+            });
+          } else if (item.item_key?.includes("master")) {
+            const inrTier = tiers.find(t => t.currency === "INR");
+            if (inrTier) { dataRow.push(item.base_inr); dataRow.push("—"); }
+            usdTiers.forEach(t => {
+              const val = computeTierPrice(item.base_inr, t.multiplier, fxRate);
+              dataRow.push(`from $${val.toLocaleString("en-US")}`);
+              dataRow.push("—");
+            });
           } else {
-            const prices = computeAllTierPrices(item.base_inr, item.floor_percent, tiers, fxRate);
-            prices.forEach(tp => { row.push(tp.list); row.push(tp.floor); });
+            const prices = computeAllTierPrices(item.base_inr, item.floor_percent, tiers, fxRate, item.price_overrides);
+            prices.forEach(tp => { dataRow.push(tp.list); dataRow.push(tp.floor); });
           }
-          row.push(item.notes ?? "");
-          rows.push(row);
+
+          dataRow.push(item.notes ?? "");
+          rcData.push(dataRow);
+          row++;
         });
 
-        const sheetData = [[sectionLabel], emptyRow, colHeaders, ...rows];
-        const ws = XLSX.utils.aoa_to_sheet(sheetData);
-        const sheetName = SECTION_LABELS[sectionKey].substring(0, 31);
-        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        // Blank row between sections
+        rcData.push([]);
+        row++;
       });
     });
+
+    // Footer
+    rcData.push(["INTERNAL ONLY — Confidential · Fynd Studio · Shopsense Retail Technologies Ltd."]);
+    merges.push({ s: { r: row, c: 0 }, e: { r: row, c: lastCol } });
+
+    const ws = XLSX.utils.aoa_to_sheet(rcData);
+    ws["!merges"] = merges;
+    ws["!cols"] = [
+      { wch: 28 }, { wch: 22 },
+      ...Array(tiers.length * 2).fill({ wch: 14 }),
+      { wch: 30 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, "Rate Card FY27");
+
+    // ── Sheet 2: Pricing Strategy ──
+    const stratData: (string | number)[][] = [
+      ["Fynd Studio · Pricing Strategy"],
+      ["How sales DRIs price, pitch, and close — internal reference"],
+      [],
+      ["§1.0 · Market Tiers"],
+      ["Region", "Tier", "Country group", "Currency", "Construct"],
+    ];
+    tiers.forEach(t => {
+      stratData.push([t.name, t.tier_level, (t.countries || []).join(", "), t.currency, `${t.multiplier}× · À la carte · Volume / Brand Retainer · Pilot`]);
+    });
+    const stratWs = XLSX.utils.aoa_to_sheet(stratData);
+    stratWs["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 4 } },
+    ];
+    stratWs["!cols"] = [{ wch: 25 }, { wch: 6 }, { wch: 45 }, { wch: 10 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, stratWs, "Pricing Strategy");
+
+    // ── Sheet 3: Guardrails ──
+    const guardData: (string | number)[][] = [
+      ["Fynd Studio · Pricing Guardrails"],
+      ["Discount authority, concentration limits, floor rules — internal reference"],
+      [],
+      ["§1.5 · Discount Guardrails"],
+      ["Discount band", "Authority", "Must consult", "Notes"],
+      ["0 – 10% off list", "Pod DRI", "—", "Bundles · quarterly upfront · strategic logo"],
+      ["10 – 20% off list", "Debajit", "Pod DRI · Rahul (Finance)", "Strategic logo · multi-line deal"],
+      ["> 20% off list", "FA written approval", "Debajit · Rahul · pod DRI", "Lighthouse logo only · documented business case"],
+      ["Below floor or below Volume Starter", "Founder sign-off only", "FA awareness", "Off-grid pricing · logged as exception"],
+      ["14 Day Pilot Sprint ≠ ₹4L", "Founder sign-off", "FA", "₹4L pilot is the standard price"],
+      [],
+      ["§1.6 · Concentration & ICP guardrails"],
+      ["Rule", "Limit / threshold", "Trigger / action"],
+      ["Single-brand cap", "No single brand > 8% of FY revenue", "Pod DRI re-shapes pipeline if trending above"],
+      ["Reliance ecosystem cap", "30% of FY revenue across all Reliance entities", "Founder + FA review at 25%"],
+    ];
+    const guardWs = XLSX.utils.aoa_to_sheet(guardData);
+    guardWs["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 3 } },
+      { s: { r: 11, c: 0 }, e: { r: 11, c: 3 } },
+    ];
+    guardWs["!cols"] = [{ wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 45 }];
+    XLSX.utils.book_append_sheet(wb, guardWs, "Guardrails");
 
     XLSX.writeFile(wb, `Fynd_Studio_Rate_Card_${version?.version_label ?? "v7"}.xlsx`);
     toast.success("Rate card downloaded as Excel");
   }, [items, tiers, fxRate, version]);
+
+  const xlsxInputRef = useRef<HTMLInputElement>(null);
+
+  const handleXlsxUpload = useCallback(async (file: File) => {
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      let updated = 0;
+
+      for (const sheetName of wb.SheetNames) {
+        const sheet = wb.Sheets[sheetName];
+        if (!sheet?.["!ref"]) continue;
+        const range = XLSX.utils.decode_range(sheet["!ref"]);
+
+        for (let r = 0; r <= range.e.r; r++) {
+          const nameCell = sheet[XLSX.utils.encode_cell({ r, c: 0 })];
+          if (!nameCell?.v) continue;
+          const name = String(nameCell.v).trim();
+
+          const item = items.find(i => i.name === name);
+          if (!item) continue;
+
+          const inrCell = sheet[XLSX.utils.encode_cell({ r, c: 3 })];
+          if (inrCell && typeof inrCell.v === "number" && inrCell.v > 0 && inrCell.v !== item.base_inr) {
+            try {
+              await updateItemField(item.id, "base_inr", inrCell.v, `XLSX import: ${file.name}`);
+              setItems(prev => prev.map(i => i.id === item.id ? { ...i, base_inr: inrCell.v as number } : i));
+              updated++;
+            } catch {}
+          }
+        }
+      }
+
+      if (updated > 0) {
+        toast.success(`Updated ${updated} price${updated > 1 ? "s" : ""} from ${file.name}`);
+      } else {
+        toast.info("No price changes found in the uploaded file");
+      }
+    } catch {
+      toast.error("Failed to parse xlsx file");
+    }
+  }, [items]);
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -629,7 +944,7 @@ export function RateCardClient({
             <span className="text-[10px] font-semibold text-muted-foreground uppercase">FX</span>
             <span className="text-sm font-bold tabular-nums">₹{fxRate.toFixed(2)}</span>
             <span className="text-[10px] text-muted-foreground">/ $1</span>
-            {liveFxRate && <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">LIVE</span>}
+            <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">{liveFxRate ? "LIVE" : "STORED"}</span>
           </div>
         </div>
 
@@ -685,7 +1000,16 @@ export function RateCardClient({
             variant={editMode ? "default" : "outline"}
             size="sm"
             className={cn("gap-1.5", editMode && "bg-primary text-primary-foreground")}
-            onClick={() => { setEditMode(!editMode); setEditingCell(null); }}
+            onClick={() => {
+              const next = !editMode;
+              setEditMode(next);
+              setEditingCell(null);
+              if (next && sectionItems.length > 0 && tiers.length > 0) {
+                setSelectedCell({ itemId: sectionItems[0].id, tierKey: tiers[0].tier_key, isFloor: false });
+              } else {
+                setSelectedCell(null);
+              }
+            }}
           >
             <Pencil className="h-3.5 w-3.5" />
             {editMode ? "Editing" : "Edit"}
@@ -694,42 +1018,51 @@ export function RateCardClient({
             <Download className="h-3.5 w-3.5" />
             Download
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn("gap-1.5", strategyOpen && "bg-primary/10 border-primary text-primary")}
-            onClick={() => { setStrategyOpen(!strategyOpen); if (!strategyOpen) { setGuardrailsOpen(false); setChangeLogOpen(false); setAiOpen(false); } }}
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-            Strategy
+          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground" onClick={() => xlsxInputRef.current?.click()}>
+            <Upload className="h-3.5 w-3.5" />
+            Upload
           </Button>
+          <input
+            ref={xlsxInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleXlsxUpload(file);
+              e.target.value = "";
+            }}
+          />
           <Button
-            variant="outline"
             size="sm"
-            className={cn("gap-1.5", guardrailsOpen && "bg-primary/10 border-primary text-primary")}
-            onClick={() => { setGuardrailsOpen(!guardrailsOpen); if (!guardrailsOpen) { setStrategyOpen(false); setChangeLogOpen(false); setAiOpen(false); } }}
-          >
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Guardrails
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn("gap-1.5", changeLogOpen && "bg-accent border-primary")}
-            onClick={() => { setChangeLogOpen(!changeLogOpen); if (!changeLogOpen) { setAiOpen(false); setStrategyOpen(false); setGuardrailsOpen(false); } }}
-          >
-            <Clock className="h-3.5 w-3.5" />
-            Change Log
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn("gap-1.5", aiOpen && "bg-primary/10 border-primary text-primary")}
-            onClick={() => { setAiOpen(!aiOpen); if (!aiOpen) { setChangeLogOpen(false); setStrategyOpen(false); setGuardrailsOpen(false); } }}
+            className={cn(
+              "gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white border-0 shadow-sm",
+              aiOpen && "from-violet-700 to-indigo-700 shadow-md"
+            )}
+            onClick={() => { setAiOpen(!aiOpen); setChangeLogOpen(false); setStrategyOpen(false); setGuardrailsOpen(false); }}
           >
             <Sparkles className="h-3.5 w-3.5" />
             Pricing AI
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("gap-1.5", (strategyOpen || guardrailsOpen || changeLogOpen) && "bg-primary/10 border-primary text-primary")}>
+                <MoreHorizontal className="h-3.5 w-3.5" />
+                More
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem className="gap-2 text-xs" onClick={() => { setStrategyOpen(!strategyOpen); setGuardrailsOpen(false); setChangeLogOpen(false); setAiOpen(false); }}>
+                <BookOpen className="h-3.5 w-3.5" /> Strategy
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 text-xs" onClick={() => { setGuardrailsOpen(!guardrailsOpen); setStrategyOpen(false); setChangeLogOpen(false); setAiOpen(false); }}>
+                <ShieldCheck className="h-3.5 w-3.5" /> Guardrails
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 text-xs" onClick={() => { setChangeLogOpen(!changeLogOpen); setAiOpen(false); setStrategyOpen(false); setGuardrailsOpen(false); }}>
+                <Clock className="h-3.5 w-3.5" /> Change Log
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -779,21 +1112,92 @@ export function RateCardClient({
       </div>
 
       {/* ── Instructional banner (dismissible) / Edit mode indicator ───── */}
-      {editMode ? (
-        <div className="bg-primary/10 border border-primary/30 rounded-md px-3 py-2 text-xs text-primary mb-3 flex items-center gap-2">
-          <Pencil className="h-3 w-3 shrink-0" />
-          <span className="flex-1">
-            <strong>Edit mode</strong> — click any price cell to edit. Editing a USD value back-calculates the INR base and updates all tiers. Press Enter to save, Escape to cancel.
-          </span>
-          <button
-            onClick={() => { setEditMode(false); setEditingCell(null); }}
-            className="text-primary/60 hover:text-primary shrink-0"
-            aria-label="Exit edit mode"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+      {/* ── Formula bar (combines edit mode help + cell editor) ────────── */}
+      {editMode && (
+        <div className="bg-slate-50 dark:bg-slate-900 border rounded-lg mb-2 text-xs">
+          {selectedCell && (() => {
+            const item = items.find(i => i.id === selectedCell.itemId);
+            const tier = tiers.find(t => t.tier_key === selectedCell.tierKey);
+            if (!item || !tier) return null;
+            const ov = item.price_overrides?.[selectedCell.tierKey];
+            const hasOverride = selectedCell.isFloor ? !!ov?.floor : !!ov?.list;
+            const overrideVal = selectedCell.isFloor ? ov?.floor : ov?.list;
+            const computed = computeTierPrice(item.base_inr, tier.multiplier, fxRate);
+            const computedFloor = roundPrice(computed * (item.floor_percent / 100));
+            const displayVal = selectedCell.isFloor
+              ? (overrideVal ?? computedFloor)
+              : (overrideVal ?? computed);
+            return (
+              <div className="flex items-center gap-2 px-3 py-1.5">
+                <span className="font-bold text-primary shrink-0 truncate max-w-[220px]">
+                  {item.name} × {tier.name.split("·")[0]?.trim()} · {selectedCell.isFloor ? "Floor" : "List"}
+                </span>
+                <span className="text-muted-foreground/40">│</span>
+                <span className="text-muted-foreground shrink-0">
+                  ₹{item.base_inr.toLocaleString("en-IN")} × {tier.multiplier}× ÷ {fxRate.toFixed(1)} = {formatCurrency(computed, tier.symbol)}
+                </span>
+                <span className="text-muted-foreground/40">│</span>
+                <span className="text-[10px] text-muted-foreground/50 shrink-0">fx</span>
+                <input
+                  type="text"
+                  className="flex-1 h-7 px-2 text-xs font-mono bg-white dark:bg-slate-800 border rounded focus:outline-none focus:ring-2 focus:ring-primary/40 min-w-[100px]"
+                  placeholder={`${displayVal} or =base*mult/fx`}
+                  defaultValue={hasOverride ? String(overrideVal) : ""}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const val = (e.target as HTMLInputElement).value.trim();
+                      if (!val) return;
+                      setEditValue(val);
+                      setEditingCell({ itemId: selectedCell.itemId, field: "price_overrides" as EditableField, tierKey: selectedCell.tierKey, isFloor: selectedCell.isFloor });
+                      setTimeout(() => commitEdit(), 0);
+                    }
+                    if (e.key === "Escape") setSelectedCell(null);
+                  }}
+                />
+                {hasOverride && (
+                  <button
+                    className="text-[10px] text-red-500 hover:text-red-700 font-semibold shrink-0"
+                    onClick={() => {
+                      const existing = item.price_overrides ?? {};
+                      const tierOv = { ...(existing[selectedCell.tierKey] ?? {}) };
+                      if (selectedCell.isFloor) delete tierOv.floor; else delete tierOv.list;
+                      const updated = { ...existing, [selectedCell.tierKey]: tierOv };
+                      if (!tierOv.list && !tierOv.floor) delete updated[selectedCell.tierKey];
+                      setReasonDialog({
+                        itemId: selectedCell.itemId,
+                        field: "price_overrides" as EditableField,
+                        newValue: JSON.stringify(updated),
+                        oldValue: String(overrideVal),
+                      });
+                      setReason("Removed price override");
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+          {!selectedCell && (
+            <div className="flex items-center gap-2 px-3 py-2">
+              <Pencil className="h-3 w-3 text-primary shrink-0" />
+              <span className="text-primary/80">Click any cell to edit</span>
+              <span className="text-muted-foreground/40 mx-1">·</span>
+              <span className="text-muted-foreground/60"><strong className="text-muted-foreground">₹ cells</strong> = base price</span>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="text-muted-foreground/60"><strong className="text-muted-foreground">$ cells</strong> = override or <code className="bg-muted px-1 rounded">=formula</code></span>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="text-muted-foreground/60"><strong className="text-muted-foreground">1.8×</strong> = edit multiplier</span>
+              <button
+                onClick={() => { setEditMode(false); setEditingCell(null); setSelectedCell(null); }}
+                className="text-muted-foreground/40 hover:text-foreground shrink-0 ml-auto"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
-      ) : null}
+      )}
 
       {/* ── Table ─────────────────────────────────────────────────────────── */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -828,7 +1232,41 @@ export function RateCardClient({
                 >
                   <div className="font-bold text-xs">{tier.name.split("·")[0]?.trim()}</div>
                   <div className="text-[10px] font-medium opacity-60 mt-0.5">
-                    {tier.currency === "INR" ? "₹ INR" : `$ USD · ${tier.multiplier}×`}
+                    {tier.currency === "INR" ? "₹ INR" : (
+                      <>
+                        $ USD ·{" "}
+                        {editMode && editingTierId === tier.id ? (
+                          <input
+                            ref={tierMultiplierRef}
+                            type="text"
+                            inputMode="decimal"
+                            className="w-10 h-4 px-1 text-[10px] text-center border rounded bg-white dark:bg-slate-800 text-primary font-bold inline"
+                            value={editTierMultiplier}
+                            onChange={(e) => { if (/^\d*\.?\d*$/.test(e.target.value)) setEditTierMultiplier(e.target.value); }}
+                            onBlur={() => saveTierMultiplier(tier.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveTierMultiplier(tier.id);
+                              if (e.key === "Escape") setEditingTierId(null);
+                            }}
+                            autoFocus
+                          />
+                        ) : (
+                          <button
+                            className={cn("font-bold", editMode && "hover:text-primary cursor-pointer underline decoration-dashed underline-offset-2")}
+                            onClick={(e) => {
+                              if (!editMode) return;
+                              e.stopPropagation();
+                              setEditingTierId(tier.id);
+                              setEditTierMultiplier(String(tier.multiplier));
+                              setTimeout(() => tierMultiplierRef.current?.focus(), 0);
+                            }}
+                            title={editMode ? "Click to edit multiplier" : undefined}
+                          >
+                            {tier.multiplier}×
+                          </button>
+                        )}
+                      </>
+                    )}
                   </div>
                   {editMode && tiers.length > 1 && (
                     <button onClick={() => { if (confirm(`Delete "${tier.name}" column?`)) handleDeleteTier(tier.id); }}
@@ -937,12 +1375,11 @@ export function RateCardClient({
                           if (e.key === "Escape") cancelEdit();
                         }}
                         onBlur={commitEdit}
-                        className="h-8 text-xs text-center border-2 border-emerald-400 rounded-md focus:ring-2 focus:ring-emerald-200"
+                        className="h-8 text-xs text-center border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-slate-400 bg-white dark:bg-slate-900"
                       />
                     ) : (
                       <span className="inline-flex items-center gap-1.5 justify-center px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-medium">
                         {item.length ?? "—"}
-                        <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-40 transition-opacity" />
                       </span>
                     )}
                   </td>
@@ -980,12 +1417,11 @@ export function RateCardClient({
                           if (e.key === "Escape") cancelEdit();
                         }}
                         onBlur={commitEdit}
-                        className="h-8 text-xs text-center border-2 border-emerald-400 rounded-md focus:ring-2 focus:ring-emerald-200"
+                        className="h-8 text-xs text-center border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-slate-400 bg-white dark:bg-slate-900"
                       />
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 text-[11px]">
+                      <span className="text-[11px]">
                         {item.sla ?? "—"}
-                        <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-40 transition-opacity" />
                       </span>
                     )}
                   </td>
@@ -1019,25 +1455,37 @@ export function RateCardClient({
                       isINR &&
                       editingCell?.itemId === item.id &&
                       editingCell.field === "base_inr";
+                    const tier = tiers[tidx];
+                    const computedList = isINR ? item.base_inr : computeTierPrice(item.base_inr, tier.multiplier, fxRate);
+                    const hasListOverride = !isINR && !!item.price_overrides?.[tp.tier_key]?.list;
+                    const listTooltip = isINR ? undefined : getFormulaTooltip(item.base_inr, tier.multiplier, fxRate, computedList, tp.symbol, hasListOverride, item.price_overrides?.[tp.tier_key]?.list);
+                    const hasFloorOverride = !isINR && !!item.price_overrides?.[tp.tier_key]?.floor;
+                    const computedFloor = isINR ? roundPrice(item.base_inr * (item.floor_percent / 100)) : roundPrice(computedList * (item.floor_percent / 100));
+                    const floorTooltip = isINR ? undefined : getFormulaTooltip(item.base_inr, tier.multiplier, fxRate, computedFloor, tp.symbol, hasFloorOverride, item.price_overrides?.[tp.tier_key]?.floor);
+                    const isSelected = selectedCell?.itemId === item.id && selectedCell.tierKey === tp.tier_key;
 
                     return (
                       <Fragment key={tp.tier_key}>
                         {/* List price */}
                         <td
                           className={cn(
-                            "px-2 py-3 text-right tabular-nums border-l-2 border-border",
+                            "px-2 py-3 text-right tabular-nums border-l-2 border-border relative",
                             isINR
                               ? "font-bold text-emerald-700 dark:text-emerald-400 group cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-950/20 transition-colors"
-                              : "font-medium text-slate-700 dark:text-slate-300",
+                              : "font-medium text-slate-700 dark:text-slate-300 cursor-pointer",
                             isEditing && "p-1",
-                            tidx > 0 && !isINR && tidx % 2 === 0 && "bg-blue-50/30 dark:bg-blue-950/10"
+                            tidx > 0 && !isINR && tidx % 2 === 0 && "bg-blue-50/30 dark:bg-blue-950/10",
+                            isSelected && !selectedCell.isFloor && "rc-selected-cell"
                           )}
-                          onClick={
-                            isINR && !isEditing
-                              ? () => startEdit(item.id, "base_inr")
-                              : undefined
-                          }
+                          title={listTooltip}
+                          onClick={() => {
+                            if (isINR && !isEditing) { startEdit(item.id, "base_inr"); return; }
+                            if (!isINR) setSelectedCell({ itemId: item.id, tierKey: tp.tier_key, isFloor: false });
+                          }}
                         >
+                          {hasListOverride && (
+                            <div className="absolute top-0 right-0 w-0 h-0 border-t-[8px] border-t-blue-500 border-l-[8px] border-l-transparent" />
+                          )}
                           {isEditing ? (
                             <Input
                               ref={inputRef}
@@ -1055,14 +1503,12 @@ export function RateCardClient({
                               className="h-8 text-xs text-right border-2 border-emerald-400 rounded-md w-28 focus:ring-2 focus:ring-emerald-200"
                             />
                           ) : isINR ? (
-                            <span className="inline-flex items-center gap-1 justify-end">
-                              {formatCurrency(tp.list, tp.symbol)}
-                              <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-40 transition-opacity shrink-0" />
-                            </span>
+                            <span>{formatCurrency(tp.list, tp.symbol)}</span>
                           ) : editingCell?.itemId === item.id && editingCell.field === "price_overrides" && editingCell.tierKey === tp.tier_key && !editingCell.isFloor ? (
                             <Input
                               ref={inputRef}
-                              type="number"
+                              type="text"
+                              placeholder="=base*1.1"
                               value={editValue}
                               onChange={(e) => setEditValue(e.target.value)}
                               onKeyDown={(e) => {
@@ -1070,12 +1516,15 @@ export function RateCardClient({
                                 if (e.key === "Escape") cancelEdit();
                               }}
                               onBlur={commitEdit}
-                              className="h-8 text-xs text-right border-2 border-primary rounded-md w-24 focus:ring-2 focus:ring-primary/30"
+                              className="h-8 text-xs text-right border border-slate-300 dark:border-slate-600 rounded-md w-24 focus:ring-1 focus:ring-slate-400 bg-white dark:bg-slate-900"
                             />
                           ) : (
                             <span
                               className="text-[12px] cursor-pointer"
-                              onClick={() => startTierOverrideEdit(item.id, tp.tier_key, tp.list, false)}
+                              onClick={() => {
+                                setSelectedCell({ itemId: item.id, tierKey: tp.tier_key, isFloor: false });
+                                startTierOverrideEdit(item.id, tp.tier_key, tp.list, false);
+                              }}
                             >
                               {formatCurrency(tp.list, tp.symbol)}
                             </span>
@@ -1083,16 +1532,27 @@ export function RateCardClient({
                         </td>
                         {/* Floor price */}
                         <td
-                          className="px-2 py-3 text-right text-slate-400 dark:text-slate-500 tabular-nums text-[12px] bg-muted/20 cursor-pointer"
+                          className={cn(
+                            "px-2 py-3 text-right text-slate-400 dark:text-slate-500 tabular-nums text-[12px] bg-muted/20 cursor-pointer relative",
+                            isSelected && selectedCell.isFloor && "rc-selected-cell"
+                          )}
+                          title={floorTooltip}
                           onClick={!(editingCell?.itemId === item.id && editingCell.field === "price_overrides" && editingCell.tierKey === tp.tier_key && editingCell.isFloor)
-                            ? () => startTierOverrideEdit(item.id, tp.tier_key, tp.floor, true)
+                            ? () => {
+                              setSelectedCell({ itemId: item.id, tierKey: tp.tier_key, isFloor: true });
+                              startTierOverrideEdit(item.id, tp.tier_key, tp.floor, true);
+                            }
                             : undefined
                           }
                         >
+                          {hasFloorOverride && (
+                            <div className="absolute top-0 right-0 w-0 h-0 border-t-[8px] border-t-blue-500 border-l-[8px] border-l-transparent" />
+                          )}
                           {editingCell?.itemId === item.id && editingCell.field === "price_overrides" && editingCell.tierKey === tp.tier_key && editingCell.isFloor ? (
                             <Input
                               ref={inputRef}
-                              type="number"
+                              type="text"
+                              placeholder="=base*0.75"
                               value={editValue}
                               onChange={(e) => setEditValue(e.target.value)}
                               onKeyDown={(e) => {
@@ -1100,7 +1560,7 @@ export function RateCardClient({
                                 if (e.key === "Escape") cancelEdit();
                               }}
                               onBlur={commitEdit}
-                              className="h-8 text-xs text-right border-2 border-primary rounded-md w-24 focus:ring-2 focus:ring-primary/30"
+                              className="h-8 text-xs text-right border border-slate-300 dark:border-slate-600 rounded-md w-24 focus:ring-1 focus:ring-slate-400 bg-white dark:bg-slate-900"
                             />
                           ) : (
                             <span>{formatCurrency(tp.floor, tp.symbol)}</span>
