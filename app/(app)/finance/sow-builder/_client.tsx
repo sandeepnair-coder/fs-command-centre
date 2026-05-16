@@ -250,25 +250,31 @@ export function SoWBuilderClient({ version, tiers, items, editingSow, onSaved }:
   }, []);
 
   // Step 1: Customer
-  const [clientName, setClientName] = useState("");
-  const [brandName, setBrandName] = useState("");
-  const [buyerName, setBuyerName] = useState("");
-  const [salesDri, setSalesDri] = useState("");
+  const [clientName, setClientName] = useState(editingSow?.client_name ?? "");
+  const [brandName, setBrandName] = useState(editingSow?.brand_name ?? "");
+  const [buyerName, setBuyerName] = useState(editingSow?.buyer_name ?? "");
+  const [salesDri, setSalesDri] = useState(editingSow?.sales_dri ?? "");
 
   // Step 2: Market
-  const [selectedTierKey, setSelectedTierKey] = useState("india");
-  const [selectedCountry, setSelectedCountry] = useState("IN");
+  const [selectedTierKey, setSelectedTierKey] = useState(editingSow?.selected_tier_key ?? "india");
+  const [selectedCountry, setSelectedCountry] = useState(() => {
+    if (editingSow) {
+      const tier = tiers.find(t => t.tier_key === editingSow.selected_tier_key);
+      return tier?.countries?.[0] ?? "IN";
+    }
+    return "IN";
+  });
 
   // Step 3: Services
-  const [gmEnabled, setGmEnabled] = useState(true);
-  const [mkEnabled, setMkEnabled] = useState(false);
+  const [gmEnabled, setGmEnabled] = useState(editingSow?.gm_enabled ?? true);
+  const [mkEnabled, setMkEnabled] = useState(editingSow?.mk_enabled ?? false);
 
   // Step 4: Configure
-  const [activeService, setActiveService] = useState<"gm" | "mk">("gm");
-  const [gmPlanType, setGmPlanType] = useState<GmPlanType>("volume");
-  const [mkPlanType, setMkPlanType] = useState<MkPlanType>("brand");
-  const [selectedGmTier, setSelectedGmTier] = useState("vol_pro");
-  const [selectedMkTier, setSelectedMkTier] = useState("br_starter");
+  const [activeService, setActiveService] = useState<"gm" | "mk">(editingSow?.gm_enabled ? "gm" : "mk");
+  const [gmPlanType, setGmPlanType] = useState<GmPlanType>((editingSow?.gm_plan_type as GmPlanType) ?? "volume");
+  const [mkPlanType, setMkPlanType] = useState<MkPlanType>((editingSow?.mk_plan_type as MkPlanType) ?? "brand");
+  const [selectedGmTier, setSelectedGmTier] = useState(editingSow?.selected_gm_tier ?? "vol_pro");
+  const [selectedMkTier, setSelectedMkTier] = useState(editingSow?.selected_mk_tier ?? "br_starter");
   const [alacarteQtys, setAlacarteQtys] = useState<Record<string, number>>({});
   const [campaignQtys, setCampaignQtys] = useState<Record<string, number>>({});
   const [strategicQtys, setStrategicQtys] = useState<Record<string, number>>(
@@ -287,9 +293,9 @@ export function SoWBuilderClient({ version, tiers, items, editingSow, onSaved }:
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
 
   // Step 5: Commercials
-  const [discount, setDiscount] = useState(10);
-  const [upfront, setUpfront] = useState(5);
-  const [months, setMonths] = useState(12);
+  const [discount, setDiscount] = useState(editingSow?.discount ?? 10);
+  const [upfront, setUpfront] = useState(editingSow?.upfront ?? 5);
+  const [months, setMonths] = useState(editingSow?.months ?? 12);
   const [targetPrice, setTargetPrice] = useState(0);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
 
