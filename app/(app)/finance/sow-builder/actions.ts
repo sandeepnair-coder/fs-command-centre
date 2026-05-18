@@ -25,6 +25,17 @@ export type SowRow = {
   annual_value: number;
   currency: string;
   symbol: string;
+  customer_requirements: string[] | null;
+  list_monthly: number;
+  bundle_discount: number;
+  alacarte_addons: { item_key: string; name: string; qty: number; unit_price: number; length?: string }[] | null;
+  scope_snapshot: {
+    gmDeliverables?: { label: string; qty: string | number; unit: string }[];
+    mkDeliverables?: { label: string; qty: string | number; unit: string }[];
+    gmTierName?: string;
+    mkTierName?: string;
+    tierNotes?: string;
+  } | null;
   status: "draft" | "sent" | "accepted" | "rejected" | "expired";
   created_by: string | null;
   created_at: string;

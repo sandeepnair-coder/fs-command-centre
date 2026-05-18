@@ -51,6 +51,17 @@ type SoWDraft = {
   annualValue: number;
   currency: string;
   symbol: string;
+  customerRequirements: string[] | null;
+  listMonthly: number;
+  bundleDiscount: number;
+  alacarteAddons: { item_key: string; name: string; qty: number; unit_price: number; length?: string }[] | null;
+  scopeSnapshot: {
+    gmDeliverables?: { label: string; qty: string | number; unit: string }[];
+    mkDeliverables?: { label: string; qty: string | number; unit: string }[];
+    gmTierName?: string;
+    mkTierName?: string;
+    tierNotes?: string;
+  } | null;
   status: "draft" | "sent" | "accepted" | "rejected" | "expired";
   createdAt: string;
   updatedAt: string;
@@ -100,6 +111,11 @@ function rowToDraft(row: SowRow): SoWDraft {
     annualValue: Number(row.annual_value),
     currency: row.currency,
     symbol: row.symbol,
+    customerRequirements: row.customer_requirements,
+    listMonthly: Number(row.list_monthly),
+    bundleDiscount: Number(row.bundle_discount),
+    alacarteAddons: row.alacarte_addons,
+    scopeSnapshot: row.scope_snapshot,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -128,6 +144,11 @@ function draftToRow(draft: SoWDraft): Omit<SowRow, "id" | "created_at" | "update
     annual_value: draft.annualValue,
     currency: draft.currency,
     symbol: draft.symbol,
+    customer_requirements: draft.customerRequirements,
+    list_monthly: draft.listMonthly,
+    bundle_discount: draft.bundleDiscount,
+    alacarte_addons: draft.alacarteAddons,
+    scope_snapshot: draft.scopeSnapshot,
     status: draft.status,
   };
 }
@@ -387,6 +408,11 @@ export function SoWListClient({ initialSows, version, tiers, items }: Props) {
                           months: sow.months,
                           netMonthly: sow.netMonthly,
                           annualValue: sow.annualValue,
+                          listMonthly: sow.listMonthly,
+                          bundleDiscount: sow.bundleDiscount,
+                          customerRequirements: sow.customerRequirements,
+                          alacarteAddons: sow.alacarteAddons,
+                          scopeSnapshot: sow.scopeSnapshot,
                           createdAt: sow.createdAt,
                         }));
                         printWindow.document.close();
