@@ -30,7 +30,7 @@
 | Settings - Members | Live | Working |
 | Settings - Connectors | Live - Partial | UI works, OpenClaw connection needs new credentials |
 | Settings - Integrations | Live - Partial | UI works, no credentials configured |
-| Slack Bot (Astra, formerly Tessa) | Live - Pilot | Slack loop + Group 1a read-only Skill working via OpenClaw. DMs and #astra-test verified. Native status indicator active. Group 1b intelligence and write tools deferred. |
+| Slack Bot (Astra, formerly Tessa) | Live - Pilot | Slack loop + Group 1a read-only + Group 1b intelligence working via OpenClaw. DMs and #astra-test verified. Native status indicator active. Write tools deferred. |
 | WhatsApp Integration | Not working | Code exists but broken |
 | Gmail Integration | Not working | Code exists but broken |
 
@@ -45,12 +45,12 @@
 
 **Approach decision:** OpenClaw handles ALL channels natively (Slack, WhatsApp, in-app WebChat, email). The 25 API endpoints become OpenClaw tools so Astra can take actions on the platform from any channel. Previous approach of custom webhook handlers was reinventing what OpenClaw already does.
 
-**Current step:** Fix read-only pilot feedback issues before adding Group 1b intelligence or write tools.
+**Current step:** Group 1a + 1b read-only tools working. Group 2 write tools BLOCKED — new Supabase schema changes paused until company-owned DB target is confirmed.
 
 **Module 2 — Register Studio API endpoints as OpenClaw tools: IN PROGRESS**
 - Step 1: Inspected all 25 /api/v1 endpoints (previous contract documented only 7) — complete
 - Step 2: Updated tool contract with all 25 endpoints, rollout groups, and OpenClaw tool exposure decision — complete
-- Step 3: Verified canonical contract path (docs/openclaw-tool-contract.md), fixed stale references — complete
+- Step 3: Verified canonical contract path (docs/integrations/openclaw-tool-contract.md), fixed stale references — complete
 - Step 4: Created Group 1a SKILL.md on VM at /data/openclaw/workspace/skills/fynd-studio/SKILL.md — complete
 - Step 5: Initial Slack read-only testing — working (client profile lookup verified from Slack)
 - Step 6: Source-boundary patch added to SKILL.md — complete (Command Centre is default source, no public web enrichment unless explicitly requested)
@@ -62,10 +62,7 @@
   - Hourglass reaction removed
   - No "Status: complete" messages
 - Tool exposure mechanism: OpenClaw Skills (SKILL.md) as MVP, with Plugin path documented for later
-- intelligence endpoint is read-only but deferred to Group 1b (register after simpler lookup tools pass)
-- Write tools are not registered yet
-- Known: some data gaps/edge cases exist because real dashboard records vary — will be handled through pilot feedback
-- Read-only pilot feedback collected. Fixing reported issues one by one.
+- Group 1a read-only tools and Group 1b intelligence registered and working. Write tools not yet registered.
 - Step 8: Slack image understanding — complete
   - Added `input: ["text", "image"]` to gpt-5.2 model config
   - Reduced `imageMaxDimensionPx` to 800 (from default 1200) to limit vision-token cost
@@ -92,9 +89,21 @@
   - Browser tool infrastructure verified working: Chromium installed, headless mode, shared libraries present
   - Slack test passed: Granola link summarized with real meeting content (key decisions, action items, pricing, next steps)
   - Normal Slack text replies still work
-- Known: some data gaps/edge cases exist because real dashboard records vary — will be handled through pilot feedback
-- Read-only pilot feedback collected. Fixing reported issues one by one.
-- Next: Fix remaining pilot feedback issues, then add Group 1b intelligence or write tools
+- Step 11: Assignee task query behavior — SOLVED
+  - Root cause: `get_board_context` returns no assignee data; `list_members` returns null for all name fields
+  - Fix: Dedicated helper script (`query-tasks-by-assignee.js`) queries all clients in parallel, filters by assignee/manager/priority, groups by board column
+  - Wrapper scripts created for all query types the model invents (tasks-overdue, assignee-workload, finance-summary, etc.)
+  - API fix: added `manager_id` resolution to `get_client_tasks` response; moved overdue/due-this-week filters to SQL level before limit
+  - AGENTS.md updated with mandatory exec commands for task and intelligence queries
+  - Partial name matching works ("Neha" matches "Neha Nilesh lad")
+- Step 12: Group 1b intelligence — COMPLETE
+  - intelligence endpoint (POST /api/v1/intelligence) added to SKILL.md with all 19 action types
+  - Task/workload intelligence validated: overdue tasks, assignee workload, tasks due this week
+  - Comms-related intelligence actions (comms_summary, comms_needs_reply, etc.) are contract-present but validation deferred until Comms backend/ingestion is wired
+  - Exec wrapper scripts created for all intelligence actions to match model's exec pattern
+  - Session clearing required after script changes to avoid poisoned context from old failed attempts
+- Group 2 writes: BLOCKED — requester identity mapping needs `slack_user_id` on `members` table, but new Supabase schema changes are paused. Current Supabase project is in the manager's personal account; company-owned DB target not yet confirmed. Do not apply `supabase/migrations/017_slack_user_id.sql` to the current personal Supabase project. Committed schema/type changes (ed8031e) remain in repo but are inert until the migration is applied on the target DB.
+- Next: Wait for company DB target confirmation before resuming Group 2 write tools or any new schema changes
 
 **Module 1 — basic Slack loop: COMPLETE**
 
@@ -225,7 +234,7 @@
 
 ## Next Up (Phase Plan)
 
-**Phase 1:** Connect OpenClaw to Slack (DONE) + register API endpoints as OpenClaw tools (Group 1a read-only — DONE, fixing pilot feedback; Group 1b intelligence + write tools — NEXT)
+**Phase 1:** Connect OpenClaw to Slack (DONE) + register API endpoints as OpenClaw tools (Group 1a read-only — DONE; Group 1b intelligence — DONE; Group 2 writes — BLOCKED pending company DB)
 **Phase 2:** Connect OpenClaw to WhatsApp (native channel via Baileys QR pairing)
 **Phase 3:** Connect in-app chat via OpenClaw WebChat channel
 **Phase 4:** Wire Comms UI to display all conversations flowing through OpenClaw across all channels

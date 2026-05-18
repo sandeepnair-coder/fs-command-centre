@@ -292,7 +292,7 @@ OpenClaw has been **restarted after Slack config and persona changes**. Slack So
 - `#astra-test` is allowlisted and working — Astra replies to direct @Astra mentions.
 - `requireMention: true` is enabled for `#astra-test`.
 - Negative tests passed: @channel ignored, @here ignored, normal channel chatter ignored.
-- Tools are not registered yet (next step).
+- Group 1a read-only tools and Group 1b intelligence registered in SKILL.md and working. Write tools not yet registered.
 
 WhatsApp, WebChat, and email channels are not yet configured.
 
@@ -374,10 +374,12 @@ The Studio API tools are exposed to Astra via an OpenClaw Skill (not a Plugin).
 - **Skill path:** `/data/openclaw/workspace/skills/fynd-studio/SKILL.md`
 - **Mechanism:** OpenClaw Skill — a markdown file auto-discovered by the agent at session startup. No code deployment required.
 - **Purpose:** Read-only Studio API lookup tools for Astra across all channels.
-- **Current enabled group:** Group 1a — simple read-only tools.
-- **Tools included:** search_clients, search_projects, get_board_context, get_client_profile, get_client_tasks, list_members
-- **Deferred:** intelligence (Group 1b) — register after Group 1a is validated in pilot.
-- **Not registered:** Write tools (Groups 2-4) — add after read-only pilot feedback.
+- **Current enabled groups:** Group 1a (simple read-only lookups) + Group 1b (intelligence dashboard queries).
+- **Group 1a tools:** search_clients, search_projects, get_board_context, get_client_profile, get_client_tasks, list_members
+- **Group 1b tool:** intelligence (19 action types — tasks, finance, comms, workload, client stats)
+- **Intelligence validation:** Task/workload actions validated (overdue, due this week, assignee workload). Comms-related actions (comms_summary, comms_needs_reply, etc.) are registered but validation deferred until Comms backend/ingestion is wired.
+- **Exec helper scripts:** Dedicated scripts in `/data/openclaw/workspace/tools/` for assignee queries, overdue tasks, intelligence actions, and Granola rendering. GPT-5.2 prefers exec scripts over exec curl — all intelligence actions have named wrapper scripts.
+- **Not registered:** Write tools (Groups 2-4) — BLOCKED. Requester identity mapping requires `slack_user_id` column on `members`, but new Supabase schema changes are paused (current Supabase is in manager's personal account, company DB target not confirmed). Do not apply `017_slack_user_id.sql`.
 
 **Auth flow:**
 - Skill uses `STUDIO_API_TOKEN` from `/data/openclaw/config/.env` on the VM to call Studio API endpoints.
@@ -527,7 +529,7 @@ All at `/api/v1/*`, authenticated via Bearer token (`OPENCLAW_API_TOKEN`).
 
 All endpoints: Zod-validated, idempotent, audit-logged, agent-flagged (`created_by_agent=true`).
 
-Full contract: `docs/openclaw-tool-contract.md`
+Full contract: `docs/integrations/openclaw-tool-contract.md`
 
 ---
 

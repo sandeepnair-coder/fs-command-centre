@@ -41,7 +41,7 @@ At the start of a task, mention which sources were used in one short line (e.g.,
 | Repo structure, stack, env vars, OpenClaw VM access, old broken paths | `chatgpt-project/3-TECHNICAL-SETUP.md` |
 | Workflow expectations (how ChatGPT/user loop works) | `chatgpt-project/4-PERSONA-AND-SYSTEM.md` |
 | Assistant naming rules (Astra vs Tessa) | `chatgpt-project/1-PRODUCT-CONTEXT.md` (AI Layer section) |
-| OpenClaw tool/API contract (25 endpoints) | `docs/openclaw-tool-contract.md` |
+| OpenClaw tool/API contract (25 endpoints) | `docs/integrations/openclaw-tool-contract.md` |
 | UI copy tone, toast patterns, empty states | `docs/ux-writing-guide.md` |
 | Full product spec, DB schema, changelog | `SPEC.md` |
 
@@ -62,7 +62,7 @@ At the start of a task, mention which sources were used in one short line (e.g.,
 
 ### Module 2 — Register Studio API endpoints as OpenClaw tools (IN PROGRESS)
 
-- 25 actual /api/v1 endpoints identified (contract: `docs/openclaw-tool-contract.md`).
+- 25 actual /api/v1 endpoints identified (contract: `docs/integrations/openclaw-tool-contract.md`).
 - Tool exposure mechanism: OpenClaw Skills (SKILL.md) as MVP wrapper.
 - Rollout: Group 1a (simple read-only lookups) first, then 1b (intelligence), then Groups 2-4.
 - Group 1a Skill created on VM and initial Slack read-only testing works (client profile lookup verified).
@@ -72,10 +72,13 @@ At the start of a task, mention which sources were used in one short line (e.g.,
 - Slack image understanding works (`input: ["text", "image"]` on gpt-5.2, `imageMaxDimensionPx: 800`).
 - Session/history limits added to prevent channel context bloat (historyLimit: 20, contextTokens: 200k, idle session resets, parentForkMaxTokens: 50k). First latency fix applied; further tuning can happen later if needed.
 - Granola/JS-rendered link reading: SOLVED. Helper script (`render-granola.js`) uses playwright-core + Chromium to render Granola pages. Mandatory exec instruction in AGENTS.md. Browser tool also configured for other JS-rendered domains.
-- Read-only pilot feedback collected. Fixing reported issues one by one.
-- intelligence is read-only but deferred until pilot feedback issues are resolved.
-- Write tools are not registered yet.
-- **Next:** Fix remaining pilot feedback issues, then add Group 1b intelligence or write tools.
+- Assignee/manager task queries: SOLVED. Helper scripts on VM query all clients, filter by assignee/manager/priority, group by column. API updated to include manager field.
+- Group 1b intelligence: WORKING. 19 action types registered. Task/workload queries validated. Comms actions deferred until backend is wired.
+- Exec helper pattern: GPT-5.2 prefers named exec scripts over exec curl. All intelligence actions have wrapper scripts in `/data/openclaw/workspace/tools/`.
+- Write tools not yet registered.
+- **Group 2 writes: BLOCKED.** Requester identity mapping requires a `slack_user_id` column on `members`, but new Supabase schema changes are paused — current Supabase project is in the manager's personal account. Company-owned DB target is not confirmed yet.
+- **Do not apply** `supabase/migrations/017_slack_user_id.sql` to the current personal Supabase project.
+- **Next:** Wait for company DB target confirmation before resuming Group 2 write tools or any new schema changes.
 
 ---
 

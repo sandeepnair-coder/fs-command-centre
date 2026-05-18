@@ -386,7 +386,7 @@ Do not force every Claude prompt into the detailed template. Choose the smallest
 | `2-BUILD-PROGRESS.md` | Build lifecycle, module status, sprint tracking, chat logs | After every module/feature completion |
 | `3-TECHNICAL-SETUP.md` | Tech stack, architecture, env vars, conventions, design system | When technical setup changes |
 | `4-PERSONA-AND-SYSTEM.md` | This file - ChatGPT behavior instructions | Rarely, only if workflow changes |
-| `docs/openclaw-tool-contract.md` | OpenClaw tool/API contract (25 endpoints) | When API endpoints change |
+| `docs/integrations/openclaw-tool-contract.md` | OpenClaw tool/API contract (25 endpoints) | When API endpoints change |
 | `ux-writing-guide.md` | UI copy tone, toast patterns, empty states, glossary | When UI copy conventions change |
 
 ---

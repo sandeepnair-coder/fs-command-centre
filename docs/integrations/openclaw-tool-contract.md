@@ -48,7 +48,7 @@ This is NOT reinventing Slack/WhatsApp/email integrations. OpenClaw handles thos
 |------|----------|-------------|
 | `intelligence` | POST /api/v1/intelligence | Query dashboards (finance, comms, tasks, workload) |
 
-`intelligence` is read-only and does not mutate data, but it has 19 action types with broader query behavior. Register it after the simpler Group 1a lookup tools are verified working.
+**Status (2026-05-15):** `intelligence` registered in SKILL.md and validated for task/workload read-only queries (overdue, due this week, assignee workload, tasks by priority/assignee/manager). Comms-related actions (comms_summary, comms_needs_reply, comms_unlinked, comms_high_priority, comms_follow_ups) are registered but validation deferred until Comms backend/ingestion is wired. Finance actions registered but data depends on Finance module usage.
 
 ### Group 2 — Additive low-risk writes (register after Group 1 tests pass)
 
